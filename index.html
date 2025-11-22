@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Tilt Survival: Final Axis Fix</title>
+    <title>Tilt Survival: Smart Landscape</title>
     <style>
         body { margin: 0; overflow: hidden; background: #2c3e50; font-family: -apple-system, BlinkMacSystemFont, sans-serif; touch-action: none; user-select: none; -webkit-user-select: none; }
         canvas { display: block; }
@@ -75,7 +75,9 @@
 
     // --- AUDIO ENGINE ---
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    
+    let starOsc = null; // Oscillator for star powerup loop
+    let starGain = null;
+
     function unlockAudio() {
         if (audioCtx.state === 'suspended') { audioCtx.resume(); }
         const buffer = audioCtx.createBuffer(1, 1, 22050); 
@@ -108,6 +110,43 @@
         } else if (type === 'powerup') { 
             osc.type = 'triangle'; osc.frequency.setValueAtTime(300, now); osc.frequency.linearRampToValueAtTime(800, now + 0.3);
             gain.gain.setValueAtTime(0.1, now); gain.gain.linearRampToValueAtTime(0, now + 0.3); osc.start(now); osc.stop(now + 0.3);
+        } else if (type === 'powerdown') { // New sound for ending
+            osc.type = 'sawtooth'; osc.frequency.setValueAtTime(400, now); osc.frequency.linearRampToValueAtTime(100, now + 0.5);
+            gain.gain.setValueAtTime(0.1, now); gain.gain.linearRampToValueAtTime(0, now + 0.5); osc.start(now); osc.stop(now + 0.5);
+        }
+    }
+
+    function startStarSound() {
+        if (starOsc) return; // Already playing
+        starOsc = audioCtx.createOscillator();
+        starGain = audioCtx.createGain();
+        starOsc.type = 'square';
+        starOsc.frequency.setValueAtTime(150, audioCtx.currentTime);
+        
+        // LFO effect for pulsing sound
+        const lfo = audioCtx.createOscillator();
+        lfo.type = 'sine';
+        lfo.frequency.value = 10; // 10 Hz wobble
+        const lfoGain = audioCtx.createGain();
+        lfoGain.gain.value = 500;
+        lfo.connect(lfoGain);
+        lfoGain.connect(starOsc.frequency);
+        lfo.start();
+
+        starOsc.connect(starGain);
+        starGain.connect(audioCtx.destination);
+        starGain.gain.value = 0.05;
+        starOsc.start();
+    }
+
+    function stopStarSound() {
+        if (starOsc) {
+            try {
+                starOsc.stop();
+                playSound('powerdown'); // Play power down sound
+            } catch(e) {}
+            starOsc = null;
+            starGain = null;
         }
     }
 
@@ -128,6 +167,9 @@
     let score = 0;
     let combo = 1;
     
+    // Orientation Handling
+    let orientationSign = 1; // 1 for Standard Landscape, -1 for Flipped
+
     let rawTiltBeta = 0, rawTiltGamma = 0; 
     let baseTiltBeta = 0, baseTiltGamma = 0; 
 
@@ -144,15 +186,35 @@
         height = window.innerHeight;
         canvas.width = width;
         canvas.height = height;
+        
+        // Check Orientation Angle
+        let angle = 0;
+        if (screen.orientation && screen.orientation.angle) {
+            angle = screen.orientation.angle;
+        } else if (window.orientation) {
+            angle = window.orientation;
+        }
+
+        // Check if portrait
         if (height > width) {
             rotateMsg.style.display = 'flex';
             if(state === 'PLAYING') state = 'PAUSED';
         } else {
             rotateMsg.style.display = 'none';
             if(state === 'PAUSED') state = 'PLAYING';
+            
+            // DETECT FLIPPED LANDSCAPE
+            // Usually 90 is standard landscape (home button right)
+            // -90 or 270 is flipped (home button left)
+            if (angle === -90 || angle === 270) {
+                orientationSign = -1;
+            } else {
+                orientationSign = 1;
+            }
         }
     }
     window.addEventListener('resize', resize);
+    window.addEventListener('orientationchange', () => { setTimeout(resize, 200); });
     resize();
 
     document.getElementById('start-btn').addEventListener('click', (e) => {
@@ -199,6 +261,7 @@
         player.x = width/2; player.y = height/2;
         player.vx = 0; player.vy = 0;
         shieldActive = false; invincibilityTimer = 0;
+        stopStarSound();
 
         updateHUD();
         state = 'COUNTDOWN';
@@ -234,7 +297,7 @@
         if (state !== 'PLAYING') return;
         if (Math.random() < 0.05 + (score * 0.0001)) spawnEnemy();
         if (Math.random() < 0.02) spawnDiamond();
-        if (Math.random() < 0.002) spawnPowerup();
+        if (Math.random() < 0.008) spawnPowerup(); // Increased frequency (was 0.002)
         setTimeout(spawnManager, 100); 
     }
 
@@ -287,13 +350,14 @@
         let forceX = Math.sign(diffX) * Math.pow(Math.abs(diffX), CONFIG.inputExponent);
         let forceY = Math.sign(diffY) * Math.pow(Math.abs(diffY), CONFIG.inputExponent);
 
-        // --- AXIS CONTROLS ---
+        // --- SMART AXIS MAPPING ---
+        // We multiply by orientationSign to handle Flipped Landscape
         
-        // X Axis (Left/Right) - REVERSED to += (previously -=)
-        player.vx += forceX * CONFIG.acceleration; 
+        // X Axis (Left/Right)
+        player.vx += forceX * CONFIG.acceleration * orientationSign; 
         
-        // Y Axis (Up/Down) - KEPT as += (User liked this)
-        player.vy += forceY * CONFIG.acceleration; 
+        // Y Axis (Up/Down)
+        player.vy += forceY * CONFIG.acceleration * orientationSign; 
 
         // Friction
         player.vx *= CONFIG.friction;
@@ -319,7 +383,17 @@
             player.angle = Math.atan2(player.vy, player.vx);
         }
 
-        if (invincibilityTimer > 0) invincibilityTimer -= 16;
+        // Invincibility Logic
+        if (invincibilityTimer > 0) {
+            invincibilityTimer -= 16;
+            if (invincibilityTimer <= 1000 && starOsc) {
+                stopStarSound(); // Cut sound 1s before end to warn user
+            }
+            if (invincibilityTimer <= 0) {
+                invincibilityTimer = 0;
+                stopStarSound();
+            }
+        }
 
         // --- COLLISIONS ---
         for (let i = enemies.length - 1; i >= 0; i--) {
@@ -368,7 +442,10 @@
             if (dist < player.size + p.radius) {
                 playSound('powerup');
                 if(p.type === 'SHIELD') shieldActive = true;
-                if(p.type === 'STAR') invincibilityTimer = CONFIG.invincibilityTime;
+                if(p.type === 'STAR') {
+                    invincibilityTimer = CONFIG.invincibilityTime;
+                    startStarSound(); // Start loop
+                }
                 powerups.splice(i, 1);
             }
         }
@@ -390,6 +467,7 @@
         state = 'DYING';
         lives--;
         combo = 1;
+        stopStarSound();
         updateHUD();
         createExplosion(player.x, player.y, '#ecf0f1', 50);
         playSound('crash');
