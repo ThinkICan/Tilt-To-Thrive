@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tilt Survival</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #f0f0f0; font-family: -apple-system, BlinkMacSystemFont, sans-serif; touch-action: none; }
+        canvas { display: block; }
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
+        h1 { font-size: 40px; margin: 0 0 20px 0; color: #333; text-shadow: 2px 2px 0px #fff; }
+        p { font-size: 18px; color: #555; margin-bottom: 30px; }
+        #start-btn { pointer-events: auto; padding: 15px 40px; font-size: 24px; background: #007AFF; color: white; border: none; border-radius: 30px; cursor: pointer; box-shadow: 0 4px 15px rgba(0,122,255,0.4); transition: transform 0.1s; }
+        #start-btn:active { transform: scale(0.95); }
+        #score-board { position: absolute; top: 20px; left: 20px; font-size: 24px; font-weight: bold; color: #333; display: none; }
+        #game-over { display: none; pointer-events: auto; background: rgba(255,255,255,0.9); padding: 40px; border-radius: 20px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+    </style>
+</head>
+<body>
+
+    <div id="score-board">Score: 0</div>
+    
+    <div id="ui-layer">
+        <div id="start-screen">
+            <h1>Tilt Survival</h1>
+            <p>Avoid the Red Dots.<br>Grab the Purple Nukes.</p>
+            <button id="start-btn">Tap to Start</button>
+        </div>
+        
+        <div id="game-over">
+            <h1 style="color: #ff3b30;">Game Over</h1>
+            <p id="final-score">Score: 0</p>
+            <button id="start-btn" onclick="resetGame()">Try Again</button>
+        </div>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const uiLayer = document.getElementById('ui-layer');
+    const startScreen = document.getElementById('start-screen');
+    const gameOverScreen = document.getElementById('game-over');
+    const scoreDisplay = document.getElementById('score-board');
+    const startBtn = document.getElementById('start-btn');
+
+    // Game State
+    let isPlaying = false;
+    let score = 0;
+    let width, height;
+    
+    // Tilt Input
+    let tiltX = 0;
+    let tiltY = 0;
+
+    // Entities
+    let player = { x: 0, y: 0, size: 15, vx: 0, vy: 0 };
+    let enemies = [];
+    let nukes = [];
+    
+    // Config
+    const FRICTION = 0.92;
+    const TILT_SENSITIVITY = 1.5;
+    const ENEMY_SPEED = 2.5;
+
+    function resize() {
+        width = window.innerWidth;
+        height = window.innerHeight;
+        canvas.width = width;
+        canvas.height = height;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // --- INPUT HANDLING (iOS PERMISSION) ---
+    startBtn.addEventListener('click', async () => {
+        if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+            // iOS 13+ devices
+            try {
+                const permissionState = await DeviceOrientationEvent.requestPermission();
+                if (permissionState === 'granted') {
+                    startGame();
+                } else {
+                    alert('Permission denied. Game cannot detect tilt.');
+                }
+            } catch (error) {
+                console.error(error);
+            }
+        } else {
+            // Non-iOS or older devices
+            startGame();
+        }
+    });
+
+    window.addEventListener('deviceorientation', (e) => {
+        // Gamma is left/right (-90 to 90)
+        // Beta is front/back (-180 to 180)
+        if(e.gamma !== null) tiltX = e.gamma; 
+        if(e.beta !== null) tiltY = e.beta;
+    });
+
+    // --- GAME LOGIC ---
+    function startGame() {
+        startScreen.style.display = 'none';
+        gameOverScreen.style.display = 'none';
+        scoreDisplay.style.display = 'block';
+        
+        player.x = width / 2;
+        player.y = height / 2;
+        player.vx = 0;
+        player.vy = 0;
+        
+        enemies = [];
+        nukes = [];
+        score = 0;
+        isPlaying = true;
+        
+        loop();
+        spawnEnemy();
+        spawnNukeLoop();
+    }
+
+    function resetGame() {
+        // Just reload logic handling via the button onclick in HTML
+        location.reload(); 
+    }
+
+    function spawnEnemy() {
+        if (!isPlaying) return;
+        
+        // Spawn at random edge
+        let ex, ey;
+        if (Math.random() < 0.5) {
+            ex = Math.random() < 0.5 ? -20 : width + 20;
+            ey = Math.random() * height;
+        } else {
+            ex = Math.random() * width;
+            ey = Math.random() < 0.5 ? -20 : height + 20;
+        }
+        
+        enemies.push({ x: ex, y: ey, size: 8 });
+        
+        // Spawn faster as score increases
+        let spawnRate = Math.max(200, 1000 - (score * 10));
+        setTimeout(spawnEnemy, spawnRate);
+    }
+
+    function spawnNukeLoop() {
+        if(!isPlaying) return;
+        // Spawn a nuke every 10 seconds roughly
+        setTimeout(() => {
+            if(isPlaying) {
+                nukes.push({ x: Math.random() * (width-40) + 20, y: Math.random() * (height-40) + 20, size: 10 });
+                spawnNukeLoop();
+            }
+        }, 10000);
+    }
+
+    function update() {
+        // Player Physics
+        player.vx += tiltX * (TILT_SENSITIVITY * 0.05);
+        player.vy += (tiltY - 45) * (TILT_SENSITIVITY * 0.05); // -45 accounts for holding phone at angle
+        
+        player.vx *= FRICTION;
+        player.vy *= FRICTION;
+        player.x += player.vx;
+        player.y += player.vy;
+
+        // Wall Collisions (Bounce)
+        if (player.x < 0) { player.x = 0; player.vx *= -0.5; }
+        if (player.x > width) { player.x = width; player.vx *= -0.5; }
+        if (player.y < 0) { player.y = 0; player.vy *= -0.5; }
+        if (player.y > height) { player.y = height; player.vy *= -0.5; }
+
+        // Enemy Logic
+        for (let i = enemies.length - 1; i >= 0; i--) {
+            let e = enemies[i];
+            // Move toward player
+            let dx = player.x - e.x;
+            let dy = player.y - e.y;
+            let dist = Math.sqrt(dx*dx + dy*dy);
+            
+            e.x += (dx / dist) * ENEMY_SPEED;
+            e.y += (dy / dist) * ENEMY_SPEED;
+
+            // Collision with Player
+            if (dist < player.size + e.size) {
+                gameOver();
+            }
+        }
+
+        // Nuke Logic
+        for (let i = nukes.length - 1; i >= 0; i--) {
+            let n = nukes[i];
+            let dx = player.x - n.x;
+            let dy = player.y - n.y;
+            let dist = Math.sqrt(dx*dx + dy*dy);
+
+            if (dist < player.size + n.size + 10) {
+                // Detonate!
+                nukes.splice(i, 1);
+                explodeNuke();
+            }
+        }
+    }
+
+    function explodeNuke() {
+        // Flash screen
+        ctx.fillStyle = 'rgba(255, 200, 0, 0.5)';
+        ctx.fillRect(0, 0, width, height);
+        
+        // Kill all enemies
+        score += enemies.length;
+        enemies = [];
+        scoreDisplay.innerText = "Score: " + score;
+    }
+
+    function gameOver() {
+        isPlaying = false;
+        document.getElementById('final-score').innerText = "Score: " + score;
+        gameOverScreen.style.display = 'block';
+        scoreDisplay.style.display = 'none';
+    }
+
+    function draw() {
+        // Clear Background
+        ctx.fillStyle = '#f4f4f9';
+        ctx.fillRect(0, 0, width, height);
+
+        if (!isPlaying) return;
+
+        // Draw Nukes
+        ctx.fillStyle = '#8e44ad';
+        nukes.forEach(n => {
+            ctx.beginPath();
+            ctx.arc(n.x, n.y, n.size, 0, Math.PI * 2);
+            ctx.fill();
+            // Pulse effect ring
+            ctx.strokeStyle = 'rgba(142, 68, 173, 0.4)';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+        });
+
+        // Draw Enemies
+        ctx.fillStyle = '#e74c3c';
+        enemies.forEach(e => {
+            ctx.beginPath();
+            ctx.arc(e.x, e.y, e.size, 0, Math.PI * 2);
+            ctx.fill();
+        });
+
+        // Draw Player (Triangle)
+        ctx.save();
+        ctx.translate(player.x, player.y);
+        // Rotate based on velocity
+        let angle = Math.atan2(player.vy, player.vx);
+        ctx.rotate(angle);
+        
+        ctx.fillStyle = '#2980b9';
+        ctx.beginPath();
+        ctx.moveTo(15, 0);
+        ctx.lineTo(-10, 10);
+        ctx.lineTo(-10, -10);
+        ctx.fill();
+        ctx.restore();
+    }
+
+    function loop() {
+        if (isPlaying) {
+            update();
+            draw();
+            requestAnimationFrame(loop);
+        }
+    }
+</script>
+</body>
+</html>
