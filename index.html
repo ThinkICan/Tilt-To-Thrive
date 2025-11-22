@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Tilt Survival: v5 (Stable)</title>
+    <title>Tilt Survival: Marble Physics</title>
     <style>
         body { margin: 0; overflow: hidden; background: #2c3e50; font-family: -apple-system, BlinkMacSystemFont, sans-serif; touch-action: none; user-select: none; -webkit-user-select: none; }
         canvas { display: block; }
@@ -61,10 +61,13 @@
     <canvas id="gameCanvas"></canvas>
 
 <script>
-    // --- CONFIG ---
+    // --- MARBLE PHYSICS CONFIG ---
     const CONFIG = {
-        friction: 0.88,      // Increased drag (was 0.94) to stop "sliding on ice" feeling
-        tiltSensitivity: 0.3, // Drastically reduced (was 1.2) for precision
+        friction: 0.88,       // Stronger friction (0.88) = "Felt Table" feel. Stops quicker.
+        tiltSensitivity: 0.8, // How fast it accelerates when you tilt.
+        filterStrength: 0.2,  // Input smoothing (0.1 = very smooth/slow, 1.0 = raw/jittery)
+        maxTilt: 35,          // Degrees. Ignores tilt beyond this to prevent flipping.
+        
         enemyBaseSpeed: 1.5,
         hitboxRatio: 0.55, 
         invincibilityTime: 5000 
@@ -74,9 +77,7 @@
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     
     function unlockAudio() {
-        if (audioCtx.state === 'suspended') {
-            audioCtx.resume();
-        }
+        if (audioCtx.state === 'suspended') { audioCtx.resume(); }
         const buffer = audioCtx.createBuffer(1, 1, 22050); 
         const source = audioCtx.createBufferSource(); 
         source.buffer = buffer; 
@@ -127,9 +128,13 @@
     let score = 0;
     let combo = 1;
     
-    // Input
+    // Input System (New Smooth Filter Variables)
     let rawTiltBeta = 0, rawTiltGamma = 0; 
-    let baseTiltBeta = 0, baseTiltGamma = 0; 
+    let baseTiltBeta = 0, baseTiltGamma = 0;
+    
+    // Smoothed Values
+    let smoothX = 0;
+    let smoothY = 0;
 
     // Entities
     let player = { x: 0, y: 0, vx: 0, vy: 0, size: 10.5, angle: 0 };
@@ -145,6 +150,7 @@
         height = window.innerHeight;
         canvas.width = width;
         canvas.height = height;
+        // Simple orientation check
         if (height > width) {
             rotateMsg.style.display = 'flex';
             if(state === 'PLAYING') state = 'PAUSED';
@@ -178,7 +184,9 @@
         }
     }
 
+    // --- SENSOR HANDLING ---
     window.addEventListener('deviceorientation', (e) => {
+        // We just capture raw data here. Physics engine handles the smoothing.
         if(e.gamma !== null) rawTiltGamma = e.gamma; 
         if(e.beta !== null) rawTiltBeta = e.beta;
     });
@@ -195,6 +203,7 @@
         
         player.x = width/2; player.y = height/2;
         player.vx = 0; player.vy = 0;
+        smoothX = 0; smoothY = 0; // Reset smoothing
         shieldActive = false; invincibilityTimer = 0;
 
         updateHUD();
@@ -214,6 +223,7 @@
                 uiCountdown.innerText = "GO!";
                 playSound('go');
                 
+                // CALIBRATION: Set current angle as Zero
                 baseTiltGamma = rawTiltGamma;
                 baseTiltBeta = rawTiltBeta;
                 
@@ -264,37 +274,58 @@
         });
     }
 
+    // --- PHYSICS ENGINE ---
     function update() {
         if (state !== 'PLAYING') {
              if (state === 'DYING') updateParticles();
              return;
         }
 
-        // Controls
-        let inputX = rawTiltGamma - baseTiltGamma;
-        let inputY = rawTiltBeta - baseTiltBeta;
+        // 1. Calculate Raw Difference from Calibration
+        let diffX = rawTiltGamma - baseTiltGamma; // Left/Right
+        let diffY = rawTiltBeta - baseTiltBeta;   // Up/Down
 
-        // Reversed: Minus operator
-        player.vx -= inputX * (CONFIG.tiltSensitivity * 0.05);
-        player.vy -= inputY * (CONFIG.tiltSensitivity * 0.05);
+        // 2. Clamp Extreme Values (Prevents erratic flipping)
+        // If you tilt more than 35 degrees, we cap it.
+        if (diffX > CONFIG.maxTilt) diffX = CONFIG.maxTilt;
+        if (diffX < -CONFIG.maxTilt) diffX = -CONFIG.maxTilt;
+        if (diffY > CONFIG.maxTilt) diffY = CONFIG.maxTilt;
+        if (diffY < -CONFIG.maxTilt) diffY = -CONFIG.maxTilt;
 
+        // 3. Low Pass Filter (Smoothing)
+        // This makes it feel like a heavy marble, not a twitchy laser.
+        // We blend 80% of the old value with 20% of the new value.
+        smoothX = smoothX * (1 - CONFIG.filterStrength) + diffX * CONFIG.filterStrength;
+        smoothY = smoothY * (1 - CONFIG.filterStrength) + diffY * CONFIG.filterStrength;
+
+        // 4. Apply Acceleration (Reversed Axes as requested)
+        // Minus sign = Reverse direction
+        player.vx -= smoothX * (CONFIG.tiltSensitivity * 0.05);
+        player.vy -= smoothY * (CONFIG.tiltSensitivity * 0.05);
+
+        // 5. Apply Felt Friction
+        // This dampens the movement quickly when tilt approaches zero.
         player.vx *= CONFIG.friction;
         player.vy *= CONFIG.friction;
+        
+        // Move
         player.x += player.vx;
         player.y += player.vy;
         
+        // Wall Bounce
         if(player.x < 0) { player.x = 0; player.vx *= -0.5; }
         if(player.x > width) { player.x = width; player.vx *= -0.5; }
         if(player.y < 0) { player.y = 0; player.vy *= -0.5; }
         if(player.y > height) { player.y = height; player.vy *= -0.5; }
 
+        // Rotation Visual
         if (Math.abs(player.vx) > 0.1 || Math.abs(player.vy) > 0.1) {
             player.angle = Math.atan2(player.vy, player.vx);
         }
 
         if (invincibilityTimer > 0) invincibilityTimer -= 16;
 
-        // Collisions
+        // --- COLLISIONS (UNCHANGED) ---
         for (let i = enemies.length - 1; i >= 0; i--) {
             let e = enemies[i];
             let dx = player.x - e.x;
