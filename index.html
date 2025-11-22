@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Tilt Survival: Precision Control</title>
+    <title>Tilt Survival: Final</title>
     <style>
         body { margin: 0; overflow: hidden; background: #2c3e50; font-family: -apple-system, BlinkMacSystemFont, sans-serif; touch-action: none; user-select: none; -webkit-user-select: none; }
         canvas { display: block; }
@@ -63,10 +63,10 @@
 <script>
     // --- CONFIG ---
     const CONFIG = {
-        friction: 0.95,         // Gliding resistance
-        acceleration: 0.006,    // LOWERED because of the exponent math
-        inputExponent: 1.6,     // CURVE: Higher number = more precision near zero, faster ramp up at edge
-        maxVelocity: 9.0,       // Speed cap
+        friction: 0.95,         
+        acceleration: 0.006,    
+        inputExponent: 1.6,     
+        maxVelocity: 9.0,       
         
         enemyBaseSpeed: 1.5,
         hitboxRatio: 0.55, 
@@ -187,9 +187,13 @@
         uiGameOver.style.display = 'none';
         uiCountdown.style.display = 'block';
         
+        // CLEAR BOARD (Always clear on new countdown)
+        enemies = []; 
+        diamonds = []; 
+        powerups = [];
+        
         if(lives <= 0 || state === 'MENU') {
             lives = 3; score = 0; combo = 1;
-            enemies = []; diamonds = []; powerups = [];
         }
         
         player.x = width/2; player.y = height/2;
@@ -213,6 +217,7 @@
                 uiCountdown.innerText = "GO!";
                 playSound('go');
                 
+                // CALIBRATION
                 baseTiltGamma = rawTiltGamma;
                 baseTiltBeta = rawTiltBeta;
                 
@@ -276,28 +281,25 @@
              return;
         }
 
-        // 1. Get Angles
         let diffX = getShortestAngleDiff(rawTiltBeta, baseTiltBeta); 
         let diffY = getShortestAngleDiff(rawTiltGamma, baseTiltGamma);
 
-        // 2. Apply Non-Linear Curve (Resolution fix)
-        // Math: sign(x) * abs(x)^exponent
-        // This makes small tilts weak, large tilts strong
+        // Resolution Curve
         let forceX = Math.sign(diffX) * Math.pow(Math.abs(diffX), CONFIG.inputExponent);
         let forceY = Math.sign(diffY) * Math.pow(Math.abs(diffY), CONFIG.inputExponent);
 
-        // 3. Apply Acceleration
+        // Acceleration
         // X Axis (Beta)
         player.vx -= forceX * CONFIG.acceleration; 
         
-        // Y Axis (Gamma) - REVERSED HERE (changed += to -=)
-        player.vy -= forceY * CONFIG.acceleration; 
+        // Y Axis (Gamma) - FLIPPED to += for Inverted Axis
+        player.vy += forceY * CONFIG.acceleration; 
 
-        // 4. Friction
+        // Friction
         player.vx *= CONFIG.friction;
         player.vy *= CONFIG.friction;
 
-        // 5. Velocity Cap
+        // Velocity Cap
         let speed = Math.sqrt(player.vx*player.vx + player.vy*player.vy);
         if (speed > CONFIG.maxVelocity) {
             let ratio = CONFIG.maxVelocity / speed;
