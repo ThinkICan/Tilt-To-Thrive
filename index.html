@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Tilt Survival: v4</title>
+    <title>Tilt Survival: v5 (Stable)</title>
     <style>
         body { margin: 0; overflow: hidden; background: #2c3e50; font-family: -apple-system, BlinkMacSystemFont, sans-serif; touch-action: none; user-select: none; -webkit-user-select: none; }
         canvas { display: block; }
@@ -63,8 +63,8 @@
 <script>
     // --- CONFIG ---
     const CONFIG = {
-        friction: 0.94,
-        tiltSensitivity: 1.2, 
+        friction: 0.92,      // Increased drag (was 0.94) to stop "sliding on ice" feeling
+        tiltSensitivity: 0.5, // Drastically reduced (was 1.2) for precision
         enemyBaseSpeed: 1.5,
         hitboxRatio: 0.55, 
         invincibilityTime: 5000 
@@ -73,12 +73,10 @@
     // --- AUDIO ENGINE ---
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     
-    // Helper to unlock audio on iOS
     function unlockAudio() {
         if (audioCtx.state === 'suspended') {
             audioCtx.resume();
         }
-        // Play a silent buffer to force the processor to wake up
         const buffer = audioCtx.createBuffer(1, 1, 22050); 
         const source = audioCtx.createBufferSource(); 
         source.buffer = buffer; 
@@ -133,7 +131,7 @@
     let rawTiltBeta = 0, rawTiltGamma = 0; 
     let baseTiltBeta = 0, baseTiltGamma = 0; 
 
-    // Entities (SCALED 75%)
+    // Entities
     let player = { x: 0, y: 0, vx: 0, vy: 0, size: 10.5, angle: 0 };
     let enemies = [];
     let diamonds = [];
@@ -158,9 +156,8 @@
     window.addEventListener('resize', resize);
     resize();
 
-    // Start Button Logic with Audio Unlock
     document.getElementById('start-btn').addEventListener('click', (e) => {
-        unlockAudio(); // Important: Call immediately on click
+        unlockAudio(); 
         initPermsAndStart();
     });
     
@@ -217,7 +214,6 @@
                 uiCountdown.innerText = "GO!";
                 playSound('go');
                 
-                // Calibration
                 baseTiltGamma = rawTiltGamma;
                 baseTiltBeta = rawTiltBeta;
                 
@@ -274,12 +270,11 @@
              return;
         }
 
-        // --- CONTROLS REVERSED HERE ---
-        // Calculate delta from calibration
+        // Controls
         let inputX = rawTiltGamma - baseTiltGamma;
         let inputY = rawTiltBeta - baseTiltBeta;
 
-        // BOTH Inputs now subtract to reverse direction
+        // Reversed: Minus operator
         player.vx -= inputX * (CONFIG.tiltSensitivity * 0.05);
         player.vy -= inputY * (CONFIG.tiltSensitivity * 0.05);
 
@@ -299,7 +294,7 @@
 
         if (invincibilityTimer > 0) invincibilityTimer -= 16;
 
-        // COLLISIONS
+        // Collisions
         for (let i = enemies.length - 1; i >= 0; i--) {
             let e = enemies[i];
             let dx = player.x - e.x;
@@ -365,14 +360,13 @@
     }
 
     function killPlayer() {
-        state = 'DYING'; // Stop updating player, only particles
+        state = 'DYING';
         lives--;
         combo = 1;
         updateHUD();
         createExplosion(player.x, player.y, '#ecf0f1', 50);
         playSound('crash');
         
-        // 2 Second Delay to watch explosion
         setTimeout(() => {
             if (lives > 0) {
                 startCountdownSequence();
@@ -401,7 +395,7 @@
             let p = particles[i];
             p.x += p.vx;
             p.y += p.vy;
-            p.life -= 0.02; // Fade speed
+            p.life -= 0.02; 
             if(p.life <= 0) particles.splice(i, 1);
         }
     }
@@ -425,7 +419,6 @@
         ctx.fillStyle = '#2c3e50';
         ctx.fillRect(0, 0, width, height);
 
-        // Items
         ctx.fillStyle = '#f1c40f';
         diamonds.forEach(d => {
             ctx.beginPath();
@@ -457,7 +450,6 @@
             }
         });
 
-        // Enemies
         ctx.fillStyle = '#e74c3c';
         enemies.forEach(e => {
             ctx.beginPath();
@@ -465,7 +457,6 @@
             ctx.fill();
         });
 
-        // Particles
         particles.forEach(p => {
             ctx.globalAlpha = p.life;
             ctx.fillStyle = p.color;
@@ -475,7 +466,6 @@
             ctx.globalAlpha = 1.0;
         });
 
-        // Player
         if (state === 'PLAYING' || state === 'COUNTDOWN') {
             ctx.save();
             ctx.translate(player.x, player.y);
