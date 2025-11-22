@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Tilt Survival: Final</title>
+    <title>Tilt Survival: Final Axis Fix</title>
     <style>
         body { margin: 0; overflow: hidden; background: #2c3e50; font-family: -apple-system, BlinkMacSystemFont, sans-serif; touch-action: none; user-select: none; -webkit-user-select: none; }
         canvas { display: block; }
@@ -187,7 +187,7 @@
         uiGameOver.style.display = 'none';
         uiCountdown.style.display = 'block';
         
-        // CLEAR BOARD (Always clear on new countdown)
+        // CLEAR BOARD
         enemies = []; 
         diamonds = []; 
         powerups = [];
@@ -284,15 +284,15 @@
         let diffX = getShortestAngleDiff(rawTiltBeta, baseTiltBeta); 
         let diffY = getShortestAngleDiff(rawTiltGamma, baseTiltGamma);
 
-        // Resolution Curve
         let forceX = Math.sign(diffX) * Math.pow(Math.abs(diffX), CONFIG.inputExponent);
         let forceY = Math.sign(diffY) * Math.pow(Math.abs(diffY), CONFIG.inputExponent);
 
-        // Acceleration
-        // X Axis (Beta)
-        player.vx -= forceX * CONFIG.acceleration; 
+        // --- AXIS CONTROLS ---
         
-        // Y Axis (Gamma) - FLIPPED to += for Inverted Axis
+        // X Axis (Left/Right) - REVERSED to += (previously -=)
+        player.vx += forceX * CONFIG.acceleration; 
+        
+        // Y Axis (Up/Down) - KEPT as += (User liked this)
         player.vy += forceY * CONFIG.acceleration; 
 
         // Friction
