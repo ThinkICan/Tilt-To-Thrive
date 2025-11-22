@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Tilt Survival: Newtonian</title>
+    <title>Tilt Survival: Precision Control</title>
     <style>
         body { margin: 0; overflow: hidden; background: #2c3e50; font-family: -apple-system, BlinkMacSystemFont, sans-serif; touch-action: none; user-select: none; -webkit-user-select: none; }
         canvas { display: block; }
@@ -61,11 +61,12 @@
     <canvas id="gameCanvas"></canvas>
 
 <script>
-    // --- NEWTONIAN CONFIG ---
+    // --- CONFIG ---
     const CONFIG = {
-        friction: 0.95,       // Resistance. Closer to 1.0 = slippery ice. Lower = thick mud.
-        acceleration: 0.04,   // How much force to apply per degree of tilt.
-        maxVelocity: 9.0,     // Speed limit.
+        friction: 0.95,         // Gliding resistance
+        acceleration: 0.006,    // LOWERED because of the exponent math
+        inputExponent: 1.6,     // CURVE: Higher number = more precision near zero, faster ramp up at edge
+        maxVelocity: 9.0,       // Speed cap
         
         enemyBaseSpeed: 1.5,
         hitboxRatio: 0.55, 
@@ -127,11 +128,9 @@
     let score = 0;
     let combo = 1;
     
-    // Input
     let rawTiltBeta = 0, rawTiltGamma = 0; 
     let baseTiltBeta = 0, baseTiltGamma = 0; 
 
-    // Entities
     let player = { x: 0, y: 0, vx: 0, vy: 0, size: 10.5, angle: 0 };
     let enemies = [];
     let diamonds = [];
@@ -179,9 +178,6 @@
     }
 
     window.addEventListener('deviceorientation', (e) => {
-        // In Landscape Mode on iOS:
-        // Beta is -90 to 90 (This controls Left/Right steering)
-        // Gamma is -180 to 180 (This controls Up/Down tipping)
         if(e.gamma !== null) rawTiltGamma = e.gamma; 
         if(e.beta !== null) rawTiltBeta = e.beta;
     });
@@ -217,7 +213,6 @@
                 uiCountdown.innerText = "GO!";
                 playSound('go');
                 
-                // CALIBRATION (Zero Point)
                 baseTiltGamma = rawTiltGamma;
                 baseTiltBeta = rawTiltBeta;
                 
@@ -268,7 +263,6 @@
         });
     }
 
-    // Math Helper to handle angle wrapping
     function getShortestAngleDiff(current, target) {
         let diff = current - target;
         while (diff > 180) diff -= 360;
@@ -282,28 +276,28 @@
              return;
         }
 
-        // --- PHYSICS ENGINE ---
-        // 1. Calculate Tilt (Input Force)
-        // In Landscape:
-        // Beta controls Game X (Left/Right)
-        // Gamma controls Game Y (Up/Down)
+        // 1. Get Angles
+        let diffX = getShortestAngleDiff(rawTiltBeta, baseTiltBeta); 
+        let diffY = getShortestAngleDiff(rawTiltGamma, baseTiltGamma);
+
+        // 2. Apply Non-Linear Curve (Resolution fix)
+        // Math: sign(x) * abs(x)^exponent
+        // This makes small tilts weak, large tilts strong
+        let forceX = Math.sign(diffX) * Math.pow(Math.abs(diffX), CONFIG.inputExponent);
+        let forceY = Math.sign(diffY) * Math.pow(Math.abs(diffY), CONFIG.inputExponent);
+
+        // 3. Apply Acceleration
+        // X Axis (Beta)
+        player.vx -= forceX * CONFIG.acceleration; 
         
-        let forceX = getShortestAngleDiff(rawTiltBeta, baseTiltBeta); 
-        let forceY = getShortestAngleDiff(rawTiltGamma, baseTiltGamma);
+        // Y Axis (Gamma) - REVERSED HERE (changed += to -=)
+        player.vy -= forceY * CONFIG.acceleration; 
 
-        // 2. Apply Acceleration (F = ma)
-        // We add force to velocity.
-        // Depending on device rotation, we might need to flip signs.
-        // Standard landscape (Home right):
-        player.vx += forceX * CONFIG.acceleration; 
-        player.vy += forceY * CONFIG.acceleration; 
-
-        // 3. Apply Friction (Damping)
-        // This ensures if Force is 0 (flat phone), velocity decays to 0.
+        // 4. Friction
         player.vx *= CONFIG.friction;
         player.vy *= CONFIG.friction;
 
-        // 4. Velocity Cap
+        // 5. Velocity Cap
         let speed = Math.sqrt(player.vx*player.vx + player.vy*player.vy);
         if (speed > CONFIG.maxVelocity) {
             let ratio = CONFIG.maxVelocity / speed;
@@ -311,17 +305,14 @@
             player.vy *= ratio;
         }
         
-        // 5. Update Position
         player.x += player.vx;
         player.y += player.vy;
         
-        // 6. Wall Bounce
         if(player.x < 0) { player.x = 0; player.vx *= -0.5; }
         if(player.x > width) { player.x = width; player.vx *= -0.5; }
         if(player.y < 0) { player.y = 0; player.vy *= -0.5; }
         if(player.y > height) { player.y = height; player.vy *= -0.5; }
 
-        // Rotation
         if (Math.abs(player.vx) > 0.1 || Math.abs(player.vy) > 0.1) {
             player.angle = Math.atan2(player.vy, player.vx);
         }
