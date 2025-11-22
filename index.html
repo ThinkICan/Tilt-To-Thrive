@@ -66,11 +66,11 @@
         friction: 0.95,         
         acceleration: 0.006,    
         inputExponent: 1.4,     // CHANGED: Closer to linear (was 1.6). More responsive.
-        maxVelocity: 9.0,       
+        maxVelocity: 8.0,       
         
         enemyBaseSpeed: 1.5,
         hitboxRatio: 0.55, 
-        invincibilityTime: 5000 
+        invincibilityTime: 12000 
     };
 
     // --- AUDIO ENGINE ---
@@ -286,7 +286,7 @@
     function spawnManager() {
         if (state !== 'PLAYING') return;
         if (Math.random() < 0.05 + (score * 0.0001)) spawnEnemy();
-        if (Math.random() < 0.02) spawnDiamond();
+        if (Math.random() < 0.04) spawnDiamond();
         if (Math.random() < 0.008) spawnPowerup(); 
         setTimeout(spawnManager, 100); 
     }
@@ -299,7 +299,7 @@
         else if(edge === 2) { ex = Math.random() * width; ey = height + 20; }
         else { ex = -20; ey = Math.random() * height; }
         
-        let speed = CONFIG.enemyBaseSpeed + (score * 0.01);
+        let speed = CONFIG.enemyBaseSpeed + (score * 0.005);
         enemies.push({ x: ex, y: ey, speed: speed, vx: 0, vy: 0, radius: 6 });
     }
 
