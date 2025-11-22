@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Tilt Survival: Gravity</title>
+    <title>Tilt Survival: Neon Arcade</title>
     <style>
         body { margin: 0; overflow: hidden; background: #2c3e50; font-family: -apple-system, BlinkMacSystemFont, sans-serif; touch-action: none; user-select: none; -webkit-user-select: none; }
         canvas { display: block; }
@@ -63,9 +63,10 @@
 <script>
     // --- CONFIG ---
     const CONFIG = {
-        friction: 0.98,         // Very light friction (Marble feel)
-        gravityScale: 0.08,     // How strong gravity pulls
-        maxVelocity: 10.0,      
+        friction: 0.95,         
+        acceleration: 0.008,    // Boosted responsiveness (was 0.006)
+        inputExponent: 1.2,     // Lowered curve (was 1.3) for sharper response near zero
+        maxVelocity: 11.0,      // Higher top speed
         
         enemyBaseSpeed: 1.5,
         hitboxRatio: 0.55, 
@@ -161,9 +162,8 @@
     let lives = 3;
     let score = 0;
     let combo = 1;
-    let landscapeAngle = 0; // 90 or -90
+    let orientationSign = 1;
 
-    // GRAVITY INPUT
     let gravityX = 0;
     let gravityY = 0;
 
@@ -172,6 +172,7 @@
     let diamonds = [];
     let powerups = [];
     let particles = [];
+    let bgParticles = []; // For the dynamic background
     let shieldActive = false;
     let invincibilityTimer = 0;
 
@@ -194,12 +195,28 @@
         } else {
             rotateMsg.style.display = 'none';
             if(state === 'PAUSED') state = 'PLAYING';
-            landscapeAngle = angle; // Store angle to fix gravity map
+            
+            if (angle === -90 || angle === 270) {
+                orientationSign = -1;
+            } else {
+                orientationSign = 1; // Default
+            }
         }
     }
     window.addEventListener('resize', resize);
     window.addEventListener('orientationchange', () => { setTimeout(resize, 200); });
     resize();
+
+    // Initialize Background Particles
+    for(let i=0; i<20; i++) {
+        bgParticles.push({
+            x: Math.random() * window.innerWidth,
+            y: Math.random() * window.innerHeight,
+            size: Math.random() * 20 + 5,
+            speed: Math.random() * 0.5 + 0.1,
+            type: Math.random() < 0.5 ? 'square' : 'triangle'
+        });
+    }
 
     document.getElementById('start-btn').addEventListener('click', (e) => {
         unlockAudio(); 
@@ -211,7 +228,6 @@
         startCountdownSequence();
     });
 
-    // NOTE: Switched to devicemotion for true gravity vector
     async function initPermsAndStart() {
         if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
             try {
@@ -224,35 +240,18 @@
         }
     }
 
-    // --- NEW INPUT ENGINE: ACCELEROMETER ---
     window.addEventListener('devicemotion', (e) => {
         if (!e.accelerationIncludingGravity) return;
-        
-        // x, y, z are raw hardware axes
         const gx = e.accelerationIncludingGravity.x || 0;
         const gy = e.accelerationIncludingGravity.y || 0;
-        // const gz = e.accelerationIncludingGravity.z || 0;
 
-        // Map Hardware Gravity to Screen Coordinates based on Rotation
-        // In default Portrait: X is Left/Right, Y is Up/Down
-        // We need to swap them for Landscape
-        
-        if (landscapeAngle === 90 || landscapeAngle === -270) {
-            // Standard Landscape (Home Button Right)
-            // Hardware X points "Down" screen
-            // Hardware Y points "Right" screen
+        // Gravity Mapping based on Landscape Orientation
+        if (orientationSign === 1) { // Standard Landscape (Home Right)
             gravityX = gy;   
             gravityY = -gx;  
-        } else if (landscapeAngle === -90 || landscapeAngle === 270) {
-            // Flipped Landscape (Home Button Left)
-            // Hardware X points "Up" screen
-            // Hardware Y points "Left" screen
+        } else { // Flipped Landscape (Home Left)
             gravityX = -gy;
             gravityY = gx;
-        } else {
-            // Fallback (Portrait or weird state)
-            gravityX = gx;
-            gravityY = -gy;
         }
     });
 
@@ -291,7 +290,6 @@
                 uiCountdown.innerText = "GO!";
                 playSound('go');
                 
-                // No Calibration needed for gravity mode!
                 setTimeout(() => {
                     uiCountdown.style.display = 'none';
                     state = 'PLAYING';
@@ -304,8 +302,13 @@
     function spawnManager() {
         if (state !== 'PLAYING') return;
         if (Math.random() < 0.05 + (score * 0.0001)) spawnEnemy();
-        if (Math.random() < 0.02) spawnDiamond();
-        if (Math.random() < 0.008) spawnPowerup(); 
+        
+        // TRIPLED Diamonds (was 0.02)
+        if (Math.random() < 0.06) spawnDiamond();
+        
+        // DOUBLED Powerups (was 0.008)
+        if (Math.random() < 0.016) spawnPowerup(); 
+        
         setTimeout(spawnManager, 100); 
     }
 
@@ -345,18 +348,17 @@
              return;
         }
 
-        // --- GRAVITY PHYSICS ---
-        // Gravity X/Y is usually between -9.8 and 9.8
-        
-        // Apply Acceleration
-        player.vx += gravityX * CONFIG.gravityScale;
-        player.vy += gravityY * CONFIG.gravityScale;
+        // Apply Curve for sensitivity
+        let forceX = Math.sign(gravityX) * Math.pow(Math.abs(gravityX), CONFIG.inputExponent);
+        let forceY = Math.sign(gravityY) * Math.pow(Math.abs(gravityY), CONFIG.inputExponent);
 
-        // Friction
+        // Axis logic
+        player.vx += forceX * CONFIG.acceleration; 
+        player.vy -= forceY * CONFIG.acceleration; // -= for Inverted Y
+
         player.vx *= CONFIG.friction;
         player.vy *= CONFIG.friction;
 
-        // Velocity Cap
         let speed = Math.sqrt(player.vx*player.vx + player.vy*player.vy);
         if (speed > CONFIG.maxVelocity) {
             let ratio = CONFIG.maxVelocity / speed;
@@ -367,7 +369,6 @@
         player.x += player.vx;
         player.y += player.vy;
         
-        // Wall Bounce
         if(player.x < 0) { player.x = 0; player.vx *= -0.5; }
         if(player.x > width) { player.x = width; player.vx *= -0.5; }
         if(player.y < 0) { player.y = 0; player.vy *= -0.5; }
@@ -442,6 +443,12 @@
         }
         
         updateParticles();
+        
+        // Update BG Particles
+        bgParticles.forEach(p => {
+            p.y += p.speed;
+            if(p.y > height) p.y = -50;
+        });
     }
 
     function destroyEnemiesInRange(range) {
@@ -512,9 +519,41 @@
     }
 
     function draw() {
+        // --- DYNAMIC BACKGROUND ---
         ctx.fillStyle = '#2c3e50';
         ctx.fillRect(0, 0, width, height);
+        
+        // Draw Parallax Grid
+        ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+        ctx.lineWidth = 2;
+        const gridSize = 80;
+        const offsetX = -(player.x * 0.15) % gridSize;
+        const offsetY = -(player.y * 0.15) % gridSize;
 
+        ctx.beginPath();
+        for (let x = offsetX; x < width; x += gridSize) {
+            ctx.moveTo(x, 0); ctx.lineTo(x, height);
+        }
+        for (let y = offsetY; y < height; y += gridSize) {
+            ctx.moveTo(0, y); ctx.lineTo(width, y);
+        }
+        ctx.stroke();
+
+        // Draw BG Particles
+        ctx.fillStyle = 'rgba(255,255,255,0.05)';
+        bgParticles.forEach(p => {
+            ctx.beginPath();
+            if(p.type === 'square') {
+                ctx.fillRect(p.x, p.y, p.size, p.size);
+            } else {
+                ctx.moveTo(p.x, p.y);
+                ctx.lineTo(p.x + p.size, p.y + p.size);
+                ctx.lineTo(p.x - p.size, p.y + p.size);
+                ctx.fill();
+            }
+        });
+
+        // --- GAME OBJECTS ---
         ctx.fillStyle = '#f1c40f';
         diamonds.forEach(d => {
             ctx.beginPath();
