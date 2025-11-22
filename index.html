@@ -65,7 +65,7 @@
     const CONFIG = {
         friction: 0.95,         
         acceleration: 0.006,    
-        inputExponent: 1.3,     // CHANGED: Closer to linear (was 1.6). More responsive.
+        inputExponent: 1.4,     // CHANGED: Closer to linear (was 1.6). More responsive.
         maxVelocity: 9.0,       
         
         enemyBaseSpeed: 1.5,
@@ -344,7 +344,7 @@
         player.vx += forceX * CONFIG.acceleration * orientationSign; 
         
         // Y Axis (Up/Down) - CHANGED to -= for Inversion
-        player.vy -= forceY * CONFIG.acceleration * orientationSign; 
+        player.vy += forceY * CONFIG.acceleration * orientationSign; 
 
         // Friction
         player.vx *= CONFIG.friction;
