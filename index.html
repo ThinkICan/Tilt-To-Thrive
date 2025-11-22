@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Tilt Survival: v2</title>
+    <title>Tilt Survival: v3</title>
     <style>
         body { margin: 0; overflow: hidden; background: #2c3e50; font-family: -apple-system, BlinkMacSystemFont, sans-serif; touch-action: none; user-select: none; -webkit-user-select: none; }
         canvas { display: block; }
@@ -68,7 +68,7 @@
     // --- CONFIG ---
     const CONFIG = {
         friction: 0.94,
-        tiltSensitivity: 1.2, // Slightly higher for snappier movement
+        tiltSensitivity: 1.2, 
         enemyBaseSpeed: 1.5,
         hitboxRatio: 0.55, 
         invincibilityTime: 5000 
@@ -123,8 +123,7 @@
     let rawTiltBeta = 0, rawTiltGamma = 0; 
     let baseTiltBeta = 0, baseTiltGamma = 0; 
 
-    // Entities (SCALED DOWN 75%)
-    // Player size 14 -> 10.5
+    // Entities (SCALED 75%)
     let player = { x: 0, y: 0, vx: 0, vy: 0, size: 10.5, angle: 0 };
     let enemies = [];
     let diamonds = [];
@@ -138,7 +137,6 @@
         height = window.innerHeight;
         canvas.width = width;
         canvas.height = height;
-        
         if (height > width) {
             rotateMsg.style.display = 'flex';
             if(state === 'PLAYING') state = 'PAUSED';
@@ -167,8 +165,6 @@
     }
 
     window.addEventListener('deviceorientation', (e) => {
-        // Gamma = Left/Right tilt (Steering wheel)
-        // Beta = Front/Back tilt (Tipping)
         if(e.gamma !== null) rawTiltGamma = e.gamma; 
         if(e.beta !== null) rawTiltBeta = e.beta;
     });
@@ -204,7 +200,7 @@
                 uiCountdown.innerText = "GO!";
                 playSound('go');
                 
-                // ZERO CALIBRATION
+                // Calibration
                 baseTiltGamma = rawTiltGamma;
                 baseTiltBeta = rawTiltBeta;
                 
@@ -234,12 +230,10 @@
         else { ex = -20; ey = Math.random() * height; }
         
         let speed = CONFIG.enemyBaseSpeed + (score * 0.01);
-        // Scaled Radius: 8 -> 6
         enemies.push({ x: ex, y: ey, speed: speed, vx: 0, vy: 0, radius: 6 });
     }
 
     function spawnDiamond() {
-        // Scaled Radius: 10 -> 7.5
         diamonds.push({ 
             x: Math.random() * (width-40) + 20, 
             y: Math.random() * (height-40) + 20, 
@@ -248,7 +242,6 @@
     }
 
     function spawnPowerup() {
-        // Scaled Radius: 12 -> 9
         let type = Math.random() < 0.5 ? 'SHIELD' : 'STAR';
         powerups.push({ 
             x: Math.random() * (width-40) + 20, 
@@ -264,20 +257,15 @@
              return;
         }
 
-        // --- INPUT MAPPING (LANDSCAPE) ---
-        // Gamma (Left/Right tilt) -> X Velocity
-        // Beta (Front/Back tilt)  -> Y Velocity
-        
+        // --- CONTROL LOGIC ---
         // Calculate delta from calibration
         let inputX = rawTiltGamma - baseTiltGamma;
         let inputY = rawTiltBeta - baseTiltBeta;
 
-        // INVERTING Y AXIS HERE based on user feedback
-        // If tilting "away" (negative beta?) was causing down movement, we flip the sign.
-        // Note: Different devices have different signs, but this should fix the "Inverted" feel.
-        
+        // REVERSED: Changed '-=' back to '+=' for natural "plane" style controls
+        // (or natural 2D plane controls depending on device)
         player.vx += inputX * (CONFIG.tiltSensitivity * 0.05);
-        player.vy -= inputY * (CONFIG.tiltSensitivity * 0.05); // CHANGED: Minus sign to invert Y
+        player.vy += inputY * (CONFIG.tiltSensitivity * 0.05); 
 
         player.vx *= CONFIG.friction;
         player.vy *= CONFIG.friction;
@@ -361,13 +349,14 @@
     }
 
     function killPlayer() {
-        state = 'DYING';
+        state = 'DYING'; // Stop updating player, only particles
         lives--;
         combo = 1;
         updateHUD();
         createExplosion(player.x, player.y, '#ecf0f1', 50);
         playSound('crash');
         
+        // 2 Second Delay to watch explosion
         setTimeout(() => {
             if (lives > 0) {
                 startCountdownSequence();
@@ -396,7 +385,7 @@
             let p = particles[i];
             p.x += p.vx;
             p.y += p.vy;
-            p.life -= 0.02;
+            p.life -= 0.02; // Fade speed
             if(p.life <= 0) particles.splice(i, 1);
         }
     }
@@ -420,6 +409,7 @@
         ctx.fillStyle = '#2c3e50';
         ctx.fillRect(0, 0, width, height);
 
+        // Items
         ctx.fillStyle = '#f1c40f';
         diamonds.forEach(d => {
             ctx.beginPath();
@@ -440,7 +430,7 @@
                 ctx.lineWidth = 2;
                 ctx.stroke();
                 ctx.fillStyle = 'white';
-                ctx.font = '8px Arial'; // Smaller font
+                ctx.font = '8px Arial';
                 ctx.fillText("S", p.x-2, p.y+3);
             } else {
                 ctx.fillStyle = '#f39c12';
@@ -451,6 +441,7 @@
             }
         });
 
+        // Enemies
         ctx.fillStyle = '#e74c3c';
         enemies.forEach(e => {
             ctx.beginPath();
@@ -458,15 +449,17 @@
             ctx.fill();
         });
 
+        // Particles (Always drawn)
         particles.forEach(p => {
             ctx.globalAlpha = p.life;
             ctx.fillStyle = p.color;
             ctx.beginPath();
-            ctx.arc(p.x, p.y, 3, 0, Math.PI*2); // Smaller particles
+            ctx.arc(p.x, p.y, 3, 0, Math.PI*2);
             ctx.fill();
             ctx.globalAlpha = 1.0;
         });
 
+        // Player - Only drawn if PLAYING or COUNTDOWN (Not DYING)
         if (state === 'PLAYING' || state === 'COUNTDOWN') {
             ctx.save();
             ctx.translate(player.x, player.y);
@@ -475,7 +468,7 @@
                 ctx.strokeStyle = '#3498db';
                 ctx.lineWidth = 3;
                 ctx.beginPath();
-                ctx.arc(0,0, 18, 0, Math.PI*2); // Smaller shield visual
+                ctx.arc(0,0, 18, 0, Math.PI*2);
                 ctx.stroke();
             }
             if (invincibilityTimer > 0) {
