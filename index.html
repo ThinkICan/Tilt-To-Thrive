@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tilt Survival: Evolved</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #2c3e50; font-family: -apple-system, BlinkMacSystemFont, sans-serif; touch-action: none; user-select: none; -webkit-user-select: none; }
+        canvas { display: block; }
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
+        
+        /* Text Styles */
+        h1 { font-size: 40px; margin: 0 0 10px 0; color: #ecf0f1; text-shadow: 2px 2px 0px #2c3e50; }
+        h2 { font-size: 80px; color: #f1c40f; margin: 0; text-shadow: 4px 4px 0px #000; display: none; } /* For Countdown */
+        p { font-size: 16px; color: #bdc3c7; margin-bottom: 20px; }
+        
+        /* HUD */
+        #hud-top { position: absolute; top: 10px; left: 15px; right: 15px; display: flex; justify-content: space-between; pointer-events: none; }
+        .hud-text { font-size: 20px; font-weight: bold; color: #ecf0f1; font-family: monospace; }
+        #combo-text { color: #2ecc71; font-size: 16px; display: none;}
+
+        /* Buttons */
+        button { pointer-events: auto; padding: 15px 40px; font-size: 24px; background: #3498db; color: white; border: none; border-radius: 50px; cursor: pointer; box-shadow: 0 6px 0 #2980b9; transition: transform 0.1s, box-shadow 0.1s; font-weight: bold; }
+        button:active { transform: translateY(4px); box-shadow: 0 2px 0 #2980b9; }
+        button.red { background: #e74c3c; box-shadow: 0 6px 0 #c0392b; }
+        button.red:active { box-shadow: 0 2px 0 #c0392b; }
+
+        /* Screens */
+        #start-screen, #game-over { pointer-events: auto; background: rgba(44, 62, 80, 0.9); padding: 30px; border-radius: 20px; border: 2px solid #34495e; }
+        #rotate-msg { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #2c3e50; z-index: 999; color: white; flex-direction: column; justify-content: center; align-items: center; }
+    </style>
+</head>
+<body>
+
+    <div id="rotate-msg">
+        <h1>↻</h1>
+        <p>Please rotate your phone to Landscape</p>
+    </div>
+
+    <div id="hud-top">
+        <div style="text-align:left;">
+            <div id="score-display" class="hud-text">SCORE: 0</div>
+            <div id="combo-display" class="hud-text" style="color:#2ecc71; font-size:14px; opacity:0;">x1 COMBO</div>
+        </div>
+        <div id="lives-display" class="hud-text">❤❤❤</div>
+    </div>
+    
+    <div id="ui-layer">
+        <h2 id="countdown-text">3</h2>
+
+        <div id="start-screen">
+            <h1>Tilt Survival</h1>
+            <p>• Tilt to Move<br>• Collect Diamonds<br>• Grab Powerups</p>
+            <button id="start-btn">TAP TO START</button>
+            <p style="font-size: 12px; margin-top: 15px; color: #7f8c8d;">(Turn sound on!)</p>
+        </div>
+        
+        <div id="game-over" style="display: none;">
+            <h1 style="color: #e74c3c;">CRASHED!</h1>
+            <p id="final-score">Score: 0</p>
+            <button class="red" id="retry-btn">TRY AGAIN</button>
+        </div>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+<script>
+    // --- CONFIG ---
+    const CONFIG = {
+        friction: 0.94,
+        tiltSensitivity: 1.0,
+        enemyBaseSpeed: 1.5,
+        hitboxRatio: 0.55, // Smaller = easier to dodge
+        invincibilityTime: 5000 // 5 seconds for the star powerup
+    };
+
+    // --- AUDIO ENGINE (Synthesizer) ---
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    
+    function playSound(type) {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        const now = audioCtx.currentTime;
+
+        if (type === 'beep') { // Drag race beep
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(440, now);
+            osc.frequency.exponentialRampToValueAtTime(0.01, now + 0.1);
+            gain.gain.setValueAtTime(0.1, now);
+            osc.start(now);
+            osc.stop(now + 0.1);
+        } else if (type === 'go') { // High pitch GO
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(880, now);
+            gain.gain.setValueAtTime(0.1, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+            osc.start(now);
+            osc.stop(now + 0.4);
+        } else if (type === 'coin') { // Diamond collect
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(1200, now);
+            osc.frequency.linearRampToValueAtTime(1800, now + 0.1);
+            gain.gain.setValueAtTime(0.1, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+            osc.start(now);
+            osc.stop(now + 0.1);
+        } else if (type === 'crash') { // Explosion
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(100, now);
+            osc.frequency.exponentialRampToValueAtTime(0.01, now + 0.5);
+            gain.gain.setValueAtTime(0.3, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+            osc.start(now);
+            osc.stop(now + 0.5);
+        } else if (type === 'powerup') { // Shield/Star
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(300, now);
+            osc.frequency.linearRampToValueAtTime(800, now + 0.3);
+            gain.gain.setValueAtTime(0.1, now);
+            gain.gain.linearRampToValueAtTime(0, now + 0.3);
+            osc.start(now);
+            osc.stop(now + 0.3);
+        }
+    }
+
+    // --- SETUP ---
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    // UI Elements
+    const uiStart = document.getElementById('start-screen');
+    const uiGameOver = document.getElementById('game-over');
+    const uiCountdown = document.getElementById('countdown-text');
+    const elScore = document.getElementById('score-display');
+    const elCombo = document.getElementById('combo-display');
+    const elLives = document.getElementById('lives-display');
+    const rotateMsg = document.getElementById('rotate-msg');
+
+    // Game State
+    let state = 'MENU'; // MENU, COUNTDOWN, PLAYING, DYING
+    let width, height;
+    let lives = 3;
+    let score = 0;
+    let combo = 1;
+    
+    // Input & Calibration
+    let rawTiltX = 0, rawTiltY = 0; // Raw sensor data
+    let baseTiltX = 0, baseTiltY = 0; // Calibration offsets
+    let calTiltX = 0, calTiltY = 0; // Final used for movement
+
+    // Objects
+    let player = { x: 0, y: 0, vx: 0, vy: 0, size: 14, angle: 0 };
+    let enemies = [];
+    let diamonds = [];
+    let powerups = [];
+    let particles = [];
+
+    // Powerups State
+    let shieldActive = false;
+    let invincibilityTimer = 0;
+
+    // Resize & Orientation
+    function resize() {
+        width = window.innerWidth;
+        height = window.innerHeight;
+        canvas.width = width;
+        canvas.height = height;
+        
+        // Check orientation
+        if (height > width) {
+            rotateMsg.style.display = 'flex';
+            if(state === 'PLAYING') state = 'PAUSED';
+        } else {
+            rotateMsg.style.display = 'none';
+            if(state === 'PAUSED') state = 'PLAYING';
+        }
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // --- INPUT ---
+    document.getElementById('start-btn').addEventListener('click', initAudioAndPerms);
+    document.getElementById('retry-btn').addEventListener('click', startCountdownSequence);
+
+    async function initAudioAndPerms() {
+        // Initialize Audio Context
+        if (audioCtx.state === 'suspended') await audioCtx.resume();
+
+        // iOS Permissions
+        if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+            try {
+                const perm = await DeviceOrientationEvent.requestPermission();
+                if (perm === 'granted') startCountdownSequence();
+                else alert('Permission denied');
+            } catch (e) { console.error(e); }
+        } else {
+            startCountdownSequence();
+        }
+    }
+
+    window.addEventListener('deviceorientation', (e) => {
+        // Store raw values. We calibrate later.
+        if(e.gamma !== null) rawTiltX = e.gamma; 
+        if(e.beta !== null) rawTiltY = e.beta;
+    });
+
+    // --- GAME FLOW ---
+    function startCountdownSequence() {
+        uiStart.style.display = 'none';
+        uiGameOver.style.display = 'none';
+        uiCountdown.style.display = 'block';
+        
+        // Reset positions but don't start logic yet
+        if(lives <= 0 || state === 'MENU') {
+            lives = 3;
+            score = 0;
+            combo = 1;
+            enemies = [];
+            diamonds = [];
+            powerups = [];
+        }
+        
+        player.x = width/2;
+        player.y = height/2;
+        player.vx = 0; 
+        player.vy = 0;
+        shieldActive = false;
+        invincibilityTimer = 0;
+
+        updateHUD();
+        state = 'COUNTDOWN';
+        
+        // 3... 2... 1... GO
+        let count = 3;
+        uiCountdown.innerText = count;
+        playSound('beep');
+        
+        let timer = setInterval(() => {
+            count--;
+            if (count > 0) {
+                uiCountdown.innerText = count;
+                playSound('beep');
+            } else {
+                clearInterval(timer);
+                uiCountdown.innerText = "GO!";
+                playSound('go');
+                
+                // CALIBRATION MOMENT
+                baseTiltX = rawTiltX;
+                baseTiltY = rawTiltY;
+                
+                setTimeout(() => {
+                    uiCountdown.style.display = 'none';
+                    state = 'PLAYING';
+                    spawnManager();
+                }, 500);
+            }
+        }, 1000);
+    }
+
+    function spawnManager() {
+        if (state !== 'PLAYING') return;
+
+        // Spawn Enemy
+        if (Math.random() < 0.05 + (score * 0.0001)) { // Gets harder
+            spawnEnemy();
+        }
+        // Spawn Diamond
+        if (Math.random() < 0.02) {
+            spawnDiamond();
+        }
+        // Spawn Powerup (Rare)
+        if (Math.random() < 0.002) {
+            spawnPowerup();
+        }
+        
+        setTimeout(spawnManager, 100); // Check every 100ms
+    }
+
+    function spawnEnemy() {
+        // Determine spawn side
+        let ex, ey;
+        let edge = Math.floor(Math.random() * 4); // 0:top, 1:right, 2:bottom, 3:left
+        if(edge === 0) { ex = Math.random() * width; ey = -20; }
+        else if(edge === 1) { ex = width + 20; ey = Math.random() * height; }
+        else if(edge === 2) { ex = Math.random() * width; ey = height + 20; }
+        else { ex = -20; ey = Math.random() * height; }
+        
+        // Start slow, get faster
+        let speed = CONFIG.enemyBaseSpeed + (score * 0.01);
+        enemies.push({ x: ex, y: ey, speed: speed, vx: 0, vy: 0, radius: 8 });
+    }
+
+    function spawnDiamond() {
+        diamonds.push({ 
+            x: Math.random() * (width-40) + 20, 
+            y: Math.random() * (height-40) + 20, 
+            radius: 10 
+        });
+    }
+
+    function spawnPowerup() {
+        let type = Math.random() < 0.5 ? 'SHIELD' : 'STAR';
+        powerups.push({ 
+            x: Math.random() * (width-40) + 20, 
+            y: Math.random() * (height-40) + 20, 
+            type: type,
+            radius: 12 
+        });
+    }
+
+    // --- LOGIC ---
+    function update() {
+        if (state !== 'PLAYING') {
+             if (state === 'DYING') updateParticles();
+             return;
+        }
+
+        // 1. Calculate Calibrated Tilt
+        // If landscape, we usually swap axes. 
+        // Simple approximation: Beta is X (tilt forward/back), Gamma is Y (tilt left/right)
+        // But in landscape, Gamma is Up/Down, Beta is Left/Right.
+        let inputX = rawTiltY - baseTiltY; // Beta
+        let inputY = rawTiltX - baseTiltX; // Gamma
+        
+        // Apply to velocity
+        player.vx += inputX * (CONFIG.tiltSensitivity * 0.05);
+        player.vy += inputY * (CONFIG.tiltSensitivity * 0.05);
+        player.vx *= CONFIG.friction;
+        player.vy *= CONFIG.friction;
+        
+        player.x += player.vx;
+        player.y += player.vy;
+        
+        // Walls
+        if(player.x < 0) { player.x = 0; player.vx *= -0.5; }
+        if(player.x > width) { player.x = width; player.vx *= -0.5; }
+        if(player.y < 0) { player.y = 0; player.vy *= -0.5; }
+        if(player.y > height) { player.y = height; player.vy *= -0.5; }
+
+        // Angle for drawing
+        if (Math.abs(player.vx) > 0.1 || Math.abs(player.vy) > 0.1) {
+            player.angle = Math.atan2(player.vy, player.vx);
+        }
+
+        // Timers
+        if (invincibilityTimer > 0) invincibilityTimer -= 16;
+
+        // --- COLLISIONS ---
+        
+        // Enemies
+        for (let i = enemies.length - 1; i >= 0; i--) {
+            let e = enemies[i];
+            // Home in on player
+            let dx = player.x - e.x;
+            let dy = player.y - e.y;
+            let dist = Math.sqrt(dx*dx + dy*dy);
+            
+            e.vx = (dx / dist) * e.speed;
+            e.vy = (dy / dist) * e.speed;
+            e.x += e.vx;
+            e.y += e.vy;
+            
+            // HIT CHECK
+            // "Hitbox Ratio" shrinks the kill zone
+            if (dist < (player.size + e.radius) * CONFIG.hitboxRatio) {
+                if (invincibilityTimer > 0) {
+                    // Ramming Speed!
+                    enemies.splice(i, 1);
+                    score += 5;
+                    createExplosion(e.x, e.y, '#f1c40f');
+                    playSound('crash');
+                } else if (shieldActive) {
+                    // Pop Shield
+                    shieldActive = false;
+                    createExplosion(player.x, player.y, '#3498db');
+                    playSound('crash');
+                    // Kill nearby enemies
+                    destroyEnemiesInRange(150);
+                } else {
+                    // DEAD
+                    killPlayer();
+                }
+            }
+        }
+
+        // Diamonds
+        for (let i = diamonds.length - 1; i >= 0; i--) {
+            let d = diamonds[i];
+            let dist = Math.hypot(player.x - d.x, player.y - d.y);
+            if (dist < player.size + d.radius) {
+                score += combo;
+                combo++;
+                updateHUD();
+                playSound('coin');
+                diamonds.splice(i, 1);
+            }
+        }
+
+        // Powerups
+        for (let i = powerups.length - 1; i >= 0; i--) {
+            let p = powerups[i];
+            let dist = Math.hypot(player.x - p.x, player.y - p.y);
+            if (dist < player.size + p.radius) {
+                playSound('powerup');
+                if(p.type === 'SHIELD') shieldActive = true;
+                if(p.type === 'STAR') invincibilityTimer = CONFIG.invincibilityTime;
+                powerups.splice(i, 1);
+            }
+        }
+        
+        updateParticles();
+    }
+
+    function destroyEnemiesInRange(range) {
+        for (let i = enemies.length - 1; i >= 0; i--) {
+            let e = enemies[i];
+            if (Math.hypot(player.x - e.x, player.y - e.y) < range) {
+                enemies.splice(i, 1);
+                createExplosion(e.x, e.y, '#e74c3c');
+            }
+        }
+    }
+
+    function killPlayer() {
+        state = 'DYING';
+        lives--;
+        combo = 1; // Reset combo
+        updateHUD();
+        createExplosion(player.x, player.y, '#ecf0f1', 50); // Big explosion
+        playSound('crash');
+        
+        setTimeout(() => {
+            if (lives > 0) {
+                startCountdownSequence();
+            } else {
+                state = 'GAMEOVER';
+                document.getElementById('final-score').innerText = "Final Score: " + score;
+                uiGameOver.style.display = 'block';
+            }
+        }, 2000);
+    }
+
+    function createExplosion(x, y, color, count = 15) {
+        for(let k=0; k<count; k++) {
+            particles.push({
+                x: x, y: y,
+                vx: (Math.random() - 0.5) * 10,
+                vy: (Math.random() - 0.5) * 10,
+                life: 1.0,
+                color: color
+            });
+        }
+    }
+
+    function updateParticles() {
+        for (let i = particles.length - 1; i >= 0; i--) {
+            let p = particles[i];
+            p.x += p.vx;
+            p.y += p.vy;
+            p.life -= 0.02;
+            if(p.life <= 0) particles.splice(i, 1);
+        }
+    }
+
+    function updateHUD() {
+        elScore.innerText = "SCORE: " + score;
+        let hearts = "";
+        for(let i=0; i<lives; i++) hearts += "❤";
+        elLives.innerText = hearts;
+        
+        if(combo > 1) {
+            elCombo.style.display = 'block';
+            elCombo.style.opacity = 1;
+            elCombo.innerText = "x" + combo + " COMBO";
+        } else {
+            elCombo.style.display = 'none';
+        }
+    }
+
+    // --- RENDER ---
+    function draw() {
+        // Background
+        ctx.fillStyle = '#2c3e50';
+        ctx.fillRect(0, 0, width, height);
+
+        // Draw Diamonds (Rhombus shape)
+        ctx.fillStyle = '#f1c40f';
+        diamonds.forEach(d => {
+            ctx.beginPath();
+            ctx.moveTo(d.x, d.y - d.radius);
+            ctx.lineTo(d.x + d.radius, d.y);
+            ctx.lineTo(d.x, d.y + d.radius);
+            ctx.lineTo(d.x - d.radius, d.y);
+            ctx.fill();
+        });
+
+        // Draw Powerups
+        powerups.forEach(p => {
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.radius, 0, Math.PI*2);
+            if(p.type === 'SHIELD') {
+                ctx.fillStyle = '#3498db';
+                ctx.fill();
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                ctx.fillStyle = 'white';
+                ctx.font = '10px Arial';
+                ctx.fillText("S", p.x-3, p.y+4);
+            } else {
+                ctx.fillStyle = '#f39c12';
+                ctx.fill();
+                ctx.fillStyle = 'white';
+                ctx.fillText("★", p.x-4, p.y+3);
+            }
+        });
+
+        // Draw Enemies
+        ctx.fillStyle = '#e74c3c';
+        enemies.forEach(e => {
+            ctx.beginPath();
+            ctx.arc(e.x, e.y, e.radius, 0, Math.PI*2);
+            ctx.fill();
+        });
+
+        // Draw Particles
+        particles.forEach(p => {
+            ctx.globalAlpha = p.life;
+            ctx.fillStyle = p.color;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 4, 0, Math.PI*2);
+            ctx.fill();
+            ctx.globalAlpha = 1.0;
+        });
+
+        // Draw Player
+        if (state === 'PLAYING' || state === 'COUNTDOWN') {
+            ctx.save();
+            ctx.translate(player.x, player.y);
+            
+            // Powerup Visuals
+            if (shieldActive) {
+                ctx.strokeStyle = '#3498db';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(0,0, 25, 0, Math.PI*2);
+                ctx.stroke();
+            }
+            if (invincibilityTimer > 0) {
+                 // Flash gold
+                 if (Math.floor(Date.now() / 50) % 2 === 0) ctx.fillStyle = '#f1c40f';
+                 else ctx.fillStyle = '#ecf0f1';
+            } else {
+                ctx.fillStyle = '#ecf0f1';
+            }
+
+            ctx.rotate(player.angle);
+            ctx.beginPath();
+            ctx.moveTo(player.size, 0);
+            ctx.lineTo(-player.size, player.size);
+            ctx.lineTo(-player.size * 0.5, 0);
+            ctx.lineTo(-player.size, -player.size);
+            ctx.fill();
+            ctx.restore();
+        }
+
+        requestAnimationFrame(draw);
+        if(state === 'PLAYING') update();
+    }
+
+    draw();
+</script>
+</body>
+</html>
