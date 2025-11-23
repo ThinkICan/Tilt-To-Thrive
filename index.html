@@ -3,16 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Tilt Survival: Deep Green</title>
+    <title>Tilt Survival: Radioactive</title>
     <style>
-        /* Dark Green Background */
+        /* Radioactive Green Background Base */
         body { margin: 0; overflow: hidden; background: #051e11; font-family: -apple-system, BlinkMacSystemFont, sans-serif; touch-action: none; user-select: none; -webkit-user-select: none; }
         canvas { display: block; }
         #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
         
         h1 { font-size: 40px; margin: 0 0 10px 0; color: #ecf0f1; text-shadow: 2px 2px 0px #000; }
         h2 { font-size: 80px; color: #f1c40f; margin: 0; text-shadow: 4px 4px 0px #000; display: none; }
-        p { font-size: 16px; color: #a3cfb3; margin-bottom: 20px; } /* Greenish text */
+        /* Brighter neon text */
+        p { font-size: 16px; color: #7fff00; margin-bottom: 20px; text-shadow: 0 0 5px rgba(127, 255, 0, 0.5); }
         
         #hud-top { position: absolute; top: 10px; left: 15px; right: 15px; display: flex; justify-content: space-between; pointer-events: none; }
         .hud-text { font-size: 20px; font-weight: bold; color: #ecf0f1; font-family: monospace; }
@@ -26,7 +27,7 @@
         button.red:active { box-shadow: 0 2px 0 #962d22; }
 
         /* Screens */
-        #start-screen, #game-over, #pause-screen { pointer-events: auto; background: rgba(10, 40, 20, 0.95); padding: 30px; border-radius: 20px; border: 2px solid #27ae60; }
+        #start-screen, #game-over, #pause-screen { pointer-events: auto; background: rgba(5, 30, 17, 0.9); padding: 30px; border-radius: 20px; border: 2px solid #7fff00; box-shadow: 0 0 20px rgba(127, 255, 0, 0.2); }
         #pause-screen { display: none; }
         #rotate-msg { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #051e11; z-index: 999; color: white; flex-direction: column; justify-content: center; align-items: center; }
         
@@ -58,7 +59,7 @@
             <h1>Tilt Survival</h1>
             <p>• Tilt to Accelerate<br>• Collect Yellow Diamonds<br>• Grab the Black Hole!</p>
             <button id="start-btn">TAP TO START</button>
-            <p style="font-size: 12px; margin-top: 15px; color: #5da878;">(Turn sound on!)</p>
+            <p style="font-size: 12px; margin-top: 15px; color: #7fff00;">(Turn sound on!)</p>
         </div>
 
         <div id="pause-screen">
@@ -84,7 +85,7 @@
         inputExponent: 1.5,     
         maxVelocity: 11.0,      
         
-        enemyBaseSpeed: 1.0,    
+        enemyBaseSpeed: 0.1,    // REDUCED to 1/10th (was 1.0)
         hitboxRatio: 0.55,
         diamondHitbox: 12,      
         invincibilityTime: 5000,
@@ -242,12 +243,12 @@
     resize();
 
     // Background Init
-    for(let i=0; i<25; i++) {
+    for(let i=0; i<30; i++) {
         bgParticles.push({
             x: Math.random() * window.innerWidth,
             y: Math.random() * window.innerHeight,
-            size: Math.random() * 20 + 5,
-            speed: Math.random() * 0.5 + 0.1,
+            size: Math.random() * 25 + 5, // Slightly larger
+            speed: Math.random() * 0.4 + 0.1,
             type: Math.random() < 0.5 ? 'square' : 'triangle'
         });
     }
@@ -376,9 +377,6 @@
         else if(edge === 2) { ex = Math.random() * width; ey = height + 20; }
         else { ex = -20; ey = Math.random() * height; }
         
-        // --- NEW SPEED FORMULA (LOGARITHMIC) ---
-        // Use natural log of score. Adding 10 prevents log(0) and gives base speed.
-        // Multiplier 0.5 controls the growth rate.
         let logFactor = Math.log(score + 10); 
         let speed = Math.min(8.0, CONFIG.enemyBaseSpeed + (logFactor * 0.5));
         
@@ -524,7 +522,7 @@
                 
                 if (dist < 20) { 
                     enemies.splice(j, 1);
-                    scorePoints(10); // Score with multiplier
+                    scorePoints(10); 
                     playSound('suck');
                     createExplosion(bh.x, bh.y, '#8e44ad', 5);
                 } else {
@@ -573,7 +571,7 @@
                 e.vx = (dx / dist) * e.speed;
                 e.vy = (dy / dist) * e.speed;
             } else {
-                e.vx *= 0.95; e.vy *= 0.95; 
+                e.vx *= 0.95; e.vy *= 0.95; // Drift
             }
             
             e.x += e.vx;
@@ -704,12 +702,16 @@
     }
 
     function draw() {
-        // --- BACKGROUND (DEEP GREEN) ---
-        ctx.fillStyle = '#051e11';
+        // --- BACKGROUND (GLOWING GEL) ---
+        // Create radial gradient
+        let grd = ctx.createRadialGradient(width/2, height/2, 0, width/2, height/2, width);
+        grd.addColorStop(0, '#145a14'); // Center glow
+        grd.addColorStop(1, '#051e11'); // Dark edges
+        ctx.fillStyle = grd;
         ctx.fillRect(0, 0, width, height);
         
-        // Parallax Grid (Teal)
-        ctx.strokeStyle = 'rgba(46, 204, 113, 0.08)';
+        // Parallax Grid (Brighter Green)
+        ctx.strokeStyle = 'rgba(127, 255, 0, 0.15)';
         ctx.lineWidth = 2;
         const gridSize = 80;
         const offsetX = -(player.x * 0.15) % gridSize;
@@ -720,8 +722,8 @@
         for (let y = offsetY; y < height; y += gridSize) { ctx.moveTo(0, y); ctx.lineTo(width, y); }
         ctx.stroke();
 
-        // BG Particles
-        ctx.fillStyle = 'rgba(46, 204, 113, 0.1)';
+        // BG Particles (Brighter)
+        ctx.fillStyle = 'rgba(127, 255, 0, 0.2)';
         bgParticles.forEach(p => {
             ctx.beginPath();
             if(p.type === 'square') ctx.fillRect(p.x, p.y, p.size, p.size);
