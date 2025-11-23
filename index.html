@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Tilt to Thrive</title>
+    <title>Tilt Survival: Vector Boost</title>
     <style>
         /* --- CORE STYLES --- */
         body { 
             margin: 0; 
             overflow: hidden; 
             background: #051e11; 
-            font-family: 'Courier New', Courier, monospace; /* Tech/Radar feel */
+            font-family: 'Courier New', Courier, monospace;
             touch-action: none; 
             user-select: none; 
             -webkit-user-select: none; 
@@ -27,7 +27,6 @@
         }
 
         /* --- HUD --- */
-        /* Uses safe-area-inset to respect iPhone notches */
         #hud-top { 
             position: absolute; 
             top: max(10px, env(safe-area-inset-top)); 
@@ -39,7 +38,7 @@
         }
         
         .hud-text { 
-            font-size: 18px; /* Smaller to prevent cutoff */
+            font-size: 18px; 
             font-weight: bold; 
             color: #ecf0f1; 
             text-shadow: 1px 1px 0 #000;
@@ -136,14 +135,12 @@
     <div id="ui-layer">
         <h2 id="countdown-text" style="font-size: 100px; color: #fff; text-shadow: 0 0 20px #f1c40f; display:none;">3</h2>
 
-        <!-- SPLASH SCREEN -->
         <div id="splash-screen" class="screen-box" style="display:flex; flex-direction:column; align-items:center;">
             <div class="logo-title">TILT TO<br>THRIVE</div>
             <div class="rotate-hint">⟳ Rotate Phone to Landscape</div>
             <p class="instruction-text" style="color: #bdc3c7">Tap anywhere to begin</p>
         </div>
 
-        <!-- START MENU -->
         <div id="start-screen" class="screen-box">
             <h2 style="margin:0 0 15px 0; color:#2ecc71; display:block;">MISSION</h2>
             <p class="instruction-text">
@@ -178,11 +175,12 @@
 <script>
     // --- CONFIG ---
     const CONFIG = {
-        // PHYSICS: Lower drag + Higher thrust = Snappy & Gliding
-        friction: 0.96,         // Higher number = Less drag (coasts longer)
-        acceleration: 0.01,     // Higher number = Faster response
+        // PHYSICS:
+        friction: 0.96,         
+        acceleration: 0.01,     
         inputExponent: 1.4,     
-        maxVelocity: 11.0,      
+        maxVelocity: 11.0,
+        turnBoost: 1.5,         // Multiplier for acceleration when turning (dot product)
         
         // Gameplay
         baseSpeed: 0.1, 
@@ -190,8 +188,8 @@
         
         // Hitboxes
         hitboxRatio: 0.55,
-        diamondHitbox: 15,      // Expanded collision for diamonds
-        shieldRadius: 24,       // Expanded shield collision (20% larger)
+        diamondHitbox: 15,      
+        shieldRadius: 24,       
         
         // Powerups
         invincibilityTime: 8000,
@@ -200,7 +198,7 @@
         blackHoleForce: 0.6,    
         fireDuration: 400,      
         fireTrailLife: 5000,    
-        fireRadius: 25,         // Collision radius for fire trail
+        fireRadius: 25,         
         
         multiplierResetTime: 15000 
     };
@@ -308,7 +306,7 @@
     const diffVal = document.getElementById('diff-val');
     let difficultyLevel = 2; 
 
-    let state = 'SPLASH'; // Initial State
+    let state = 'SPLASH'; 
     let width, height;
     let lives = 3;
     let score = 0;
@@ -376,7 +374,6 @@
         });
     }
 
-    // Show Splash Initially
     uiSplash.style.display = 'flex';
 
     // --- INPUTS ---
@@ -387,7 +384,6 @@
         else diffVal.innerText = "HARD";
     });
 
-    // CLICK HANDLERS
     uiSplash.addEventListener('click', () => {
         unlockAudio();
         uiSplash.style.display = 'none';
@@ -412,10 +408,8 @@
         resumeGame();
     });
 
-    // Pause Listeners (Touch & Click)
     window.addEventListener('touchstart', (e) => {
         if(state !== 'PLAYING') return;
-        // Ignore if touching UI buttons
         if(e.target.tagName === 'BUTTON' || e.target.closest('.screen-box')) return;
         pauseGame();
     });
@@ -566,11 +560,10 @@
         let r = Math.random();
         let type = 'SHIELD';
         
-        // Spawn Rates
-        if (r < 0.4) type = 'SHIELD'; // 40% Shield (Frequent)
-        else if (r < 0.75) type = 'STAR'; // 35% Star
-        else if (r < 0.9) type = 'HOLE'; // 15% Hole
-        else type = 'FIRE'; // 10% Fire
+        if (r < 0.35) type = 'SHIELD';
+        else if (r < 0.7) type = 'STAR';
+        else if (r < 0.9) type = 'HOLE';
+        else type = 'FIRE';
 
         powerups.push({ 
             x: Math.random() * (width-40) + 20, 
@@ -595,7 +588,6 @@
         boostOriginalVx = player.vx;
         boostOriginalVy = player.vy;
         boostTimer = CONFIG.fireDuration; 
-        // Invincible for duration + 200ms extra safety buffer
         invincibilityTimer = CONFIG.fireDuration + 200; 
     }
 
@@ -634,26 +626,26 @@
         if (boostTimer > 0) {
             let phase = CONFIG.fireDuration - boostTimer;
             
-            if (phase < 100) { // Accelerate
+            if (phase < 100) {
                 player.vx = Math.cos(player.angle) * CONFIG.maxVelocity;
                 player.vy = Math.sin(player.angle) * CONFIG.maxVelocity;
-            } else if (phase < 300) { // Hold
-            } else { // Decelerate
+            } else if (phase < 300) {
+                // Hold
+            } else {
                 let t = (phase - 300) / 100; 
                 player.vx = player.vx * (1-t) + boostOriginalVx * t;
                 player.vy = player.vy * (1-t) + boostOriginalVy * t;
             }
             
-            // Add Multiple Fire Particles for "Billowing"
             for(let k=0; k<3; k++) {
                 fireTrails.push({
                     x: player.x + (Math.random()-0.5)*10, 
                     y: player.y + (Math.random()-0.5)*10,
                     life: CONFIG.fireTrailLife,
                     maxLife: CONFIG.fireTrailLife,
-                    size: 10 + Math.random() * 20, // Varied sizes
+                    size: 10 + Math.random() * 20, 
                     angle: Math.random() * Math.PI * 2,
-                    vx: (Math.random()-0.5)*0.5, // Slight drift
+                    vx: (Math.random()-0.5)*0.5, 
                     vy: (Math.random()-0.5)*0.5
                 });
             }
@@ -663,16 +655,43 @@
             let diffX = getShortestAngleDiff(rawTiltBeta, baseTiltBeta); 
             let diffY = getShortestAngleDiff(rawTiltGamma, baseTiltGamma);
 
-            let forceX = Math.sign(diffX) * Math.pow(Math.abs(diffX), CONFIG.inputExponent);
-            let forceY = Math.sign(diffY) * Math.pow(Math.abs(diffY), CONFIG.inputExponent);
+            // --- NEW: Dot Product Boost ---
+            // 1. Normalize velocity
+            let speed = Math.sqrt(player.vx*player.vx + player.vy*player.vy);
+            let vxNorm = (speed > 0.1) ? player.vx / speed : 0;
+            let vyNorm = (speed > 0.1) ? player.vy / speed : 0;
 
-            player.vx += forceX * CONFIG.acceleration * orientationSign; 
-            player.vy -= forceY * CONFIG.acceleration * orientationSign; 
+            // 2. Normalize input force
+            let forceMagX = Math.pow(Math.abs(diffX), CONFIG.inputExponent);
+            let forceMagY = Math.pow(Math.abs(diffY), CONFIG.inputExponent);
+            let forceSignX = Math.sign(diffX);
+            let forceSignY = Math.sign(diffY);
+            
+            // Calculate raw input vector (normalized roughly)
+            let totalForce = Math.sqrt(forceMagX*forceMagX + forceMagY*forceMagY);
+            let fxNorm = (totalForce > 0) ? (forceMagX * forceSignX) / totalForce : 0;
+            let fyNorm = (totalForce > 0) ? (forceMagY * forceSignY) / totalForce : 0;
+
+            // 3. Dot Product (How parallel are we?)
+            // Since Y is inverted for gameplay, flip it for dot calculation to match screen space
+            // player.vy is Screen Y. forceY is Input Y.
+            // Actually, simpler: 
+            // Input X aligns with player Vx. Input Y (negative) aligns with player Vy.
+            let dot = (vxNorm * (fxNorm * orientationSign)) + (vyNorm * (-fyNorm * orientationSign));
+            
+            // 4. Turn Boost Logic
+            // dot = 1 (Parallel), dot = 0 (Perpendicular), dot = -1 (Opposite)
+            // We want boost when dot is near 0.
+            let turnFactor = 1 - Math.abs(dot); // 1.0 at 90 degrees
+            let dynamicAccel = CONFIG.acceleration * (1 + (turnFactor * CONFIG.turnBoost));
+
+            // Apply Forces
+            player.vx += forceMagX * forceSignX * dynamicAccel * orientationSign; 
+            player.vy -= forceMagY * forceSignY * dynamicAccel * orientationSign; 
 
             player.vx *= CONFIG.friction;
             player.vy *= CONFIG.friction;
 
-            let speed = Math.sqrt(player.vx*player.vx + player.vy*player.vy);
             if (speed > CONFIG.maxVelocity) {
                 let ratio = CONFIG.maxVelocity / speed;
                 player.vx *= ratio;
@@ -715,8 +734,7 @@
             
             for (let j = enemies.length - 1; j >= 0; j--) {
                 let e = enemies[j];
-                // Expanded Fire Hitbox (Give cover)
-                if (Math.hypot(f.x - e.x, f.y - e.y) < CONFIG.fireRadius + e.radius) {
+                if (Math.hypot(f.x - e.x, f.y - e.y) < (f.size * 0.8) + e.radius) {
                     enemies.splice(j, 1);
                     scorePoints(10);
                     createExplosion(e.x, e.y, '#e67e22');
@@ -732,7 +750,6 @@
             bh.life -= 16;
             if (bh.life <= 0) { blackHoles.splice(i, 1); continue; }
 
-            // Pull Enemies (Stronger)
             for (let j = enemies.length - 1; j >= 0; j--) {
                 let e = enemies[j];
                 let dx = bh.x - e.x;
@@ -741,14 +758,12 @@
                 if (Math.sqrt(distSq) < 20) { 
                     enemies.splice(j, 1); scorePoints(10); playSound('suck'); createExplosion(bh.x, bh.y, '#8e44ad', 5);
                 } else {
-                    // Doubled pull force for enemies
-                    let f = (CONFIG.blackHoleForce * 2.0 * 1500) / Math.max(distSq, 100);
+                    let f = (CONFIG.blackHoleForce * 1500) / Math.max(distSq, 100);
                     e.x += (dx / Math.sqrt(distSq)) * f;
                     e.y += (dy / Math.sqrt(distSq)) * f;
                 }
             }
 
-            // Pull Diamonds
             for (let j = diamonds.length - 1; j >= 0; j--) {
                 let d = diamonds[j];
                 let dx = bh.x - d.x;
@@ -763,13 +778,11 @@
                 }
             }
             
-            // Pull Player (Weaker)
             let pdx = bh.x - player.x;
             let pdy = bh.y - player.y;
             let pDistSq = pdx*pdx + pdy*pdy;
             let pDist = Math.sqrt(pDistSq);
-            // Reduced pull on player (0.9 multiplier)
-            let pf = (CONFIG.blackHoleForce * 0.9 * 300) / Math.max(pDistSq, 100); 
+            let pf = (CONFIG.blackHoleForce * 300) / Math.max(pDistSq, 100); 
             player.vx += (pdx / pDist) * pf;
             player.vy += (pdy / pDist) * pf;
         }
@@ -791,7 +804,6 @@
             e.x += e.vx;
             e.y += e.vy;
             
-            // Use Expanded Shield Radius if active
             let hitDist = (shieldActive || invincibilityTimer > 0) ? CONFIG.shieldRadius : (player.size * CONFIG.hitboxRatio);
             let pDist = Math.hypot(player.x - e.x, player.y - e.y);
 
@@ -864,7 +876,7 @@
     function killPlayer() {
         state = 'DYING';
         lives--;
-        scoreMultiplier = 1; // Reset multiplier on crash
+        scoreMultiplier = 1; 
         combo = 1;
         stopStarSound();
         updateHUD();
@@ -944,18 +956,22 @@
             }
         });
 
-        // --- FIRE TRAIL (Billowing Smoke/Fire) ---
+        // --- FIRE TRAIL (Oscillating Squares) ---
         fireTrails.forEach(f => {
-            let lifePct = f.life / f.maxLife;
+            let alpha = f.life / CONFIG.fireTrailLife;
             
-            // Color gradient: Yellow -> Orange -> Red -> Dark Gray
-            if (lifePct > 0.7) ctx.fillStyle = `rgba(255, 255, 0, ${lifePct})`; // Yellow
-            else if (lifePct > 0.4) ctx.fillStyle = `rgba(255, 100, 0, ${lifePct})`; // Orange
-            else ctx.fillStyle = `rgba(100, 100, 100, ${lifePct})`; // Smoke
+            if (alpha > 0.6) ctx.fillStyle = `rgba(230, 126, 34, ${alpha})`;
+            else if (alpha > 0.3) ctx.fillStyle = `rgba(241, 196, 15, ${alpha})`;
+            else ctx.fillStyle = `rgba(128, 128, 128, ${alpha})`;
 
-            ctx.beginPath();
-            ctx.arc(f.x, f.y, f.size * lifePct, 0, Math.PI*2); // Shrink over time
-            ctx.fill();
+            ctx.save();
+            ctx.translate(f.x, f.y);
+            ctx.rotate(f.angle + (Date.now()/200)); 
+            
+            let oscSize = f.size * (0.8 + Math.sin(Date.now()/50)*0.2); 
+            
+            ctx.fillRect(-oscSize/2, -oscSize/2, oscSize, oscSize);
+            ctx.restore();
         });
 
         blackHoles.forEach(bh => {
@@ -999,10 +1015,8 @@
             ctx.lineTo(d.x, d.y + d.radius);
             ctx.lineTo(d.x - d.radius, d.y);
             ctx.fill();
-            // White Outline
-            ctx.strokeStyle = 'white';
-            ctx.lineWidth = 1.5;
-            ctx.stroke();
+            
+            ctx.strokeStyle = 'white'; ctx.lineWidth = 1.5; ctx.stroke();
             
             if(Math.random() < 0.05) {
                 ctx.fillStyle = 'white';
@@ -1048,29 +1062,16 @@
             ctx.save();
             ctx.translate(player.x, player.y);
             
-            // Shield Visual
             if (shieldActive) {
-                ctx.save();
-                ctx.rotate(Date.now()/200); // Rotate shield
                 ctx.strokeStyle = '#3498db'; ctx.lineWidth = 3;
-                ctx.beginPath(); 
-                ctx.arc(0,0, CONFIG.shieldRadius, 0, Math.PI*2); 
-                ctx.stroke();
-                
-                // Inner detail
-                ctx.setLineDash([5, 5]);
-                ctx.lineWidth = 1;
-                ctx.beginPath(); ctx.arc(0,0, CONFIG.shieldRadius - 4, 0, Math.PI*2); ctx.stroke();
-                ctx.restore();
+                ctx.beginPath(); ctx.arc(0,0, 20, 0, Math.PI*2); ctx.stroke();
             }
-            
-            // Hollow Gear for Invincibility (Star or Boost)
             if (invincibilityTimer > 0) {
                  ctx.save();
                  ctx.rotate(Date.now()/200); 
                  ctx.beginPath();
                  const spikes = 8;
-                 const outer = 26; // 20% larger than 22
+                 const outer = 26; 
                  const inner = 17;
                  for(let i=0; i<spikes*2; i++) {
                      const r = (i%2===0) ? outer : inner;
@@ -1084,7 +1085,6 @@
                  ctx.restore();
             }
 
-            // Draw Ship Body
             ctx.rotate(player.angle);
             ctx.fillStyle = (invincibilityTimer > 0) ? '#f1c40f' : '#ecf0f1';
             ctx.beginPath();
