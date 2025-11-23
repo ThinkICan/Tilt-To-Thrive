@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Tilt Survival: Balanced</title>
+    <title>Tilt Survival: Firestorm</title>
     <style>
         /* Radioactive Green Background Base */
         body { margin: 0; overflow: hidden; background: #051e11; font-family: -apple-system, BlinkMacSystemFont, sans-serif; touch-action: none; user-select: none; -webkit-user-select: none; }
@@ -62,7 +62,7 @@
 
         <div id="start-screen">
             <h1>Tilt Survival</h1>
-            <p>• Tilt to Accelerate<br>• Collect Yellow Diamonds<br>• Grab the Black Hole!</p>
+            <p>• Tilt to Accelerate<br>• Collect Yellow Diamonds<br>• Grab Powerups!</p>
             
             <div class="slider-container">
                 <label for="diff-slider" style="color:white">Difficulty</label>
@@ -97,17 +97,23 @@
         inputExponent: 1.5,     
         maxVelocity: 11.0,      
         
-        // Enemy settings now dynamic based on Difficulty
+        // Difficulty variables (set in start)
         baseSpeed: 0.1, 
         spawnRate: 0.05,
         
         hitboxRatio: 0.55,
         diamondHitbox: 12,
-        shieldRadius: 20,       // Size of collision when shield is active
+        shieldRadius: 20,       
         invincibilityTime: 5000,
+        
+        // Black Hole
         blackHoleDuration: 10000,
         blackHoleDelay: 2000,   
         blackHoleForce: 0.6,    
+        
+        // Fire Booster
+        fireDuration: 400,      // Total boost time (ms)
+        fireTrailLife: 5000,    // How long trail burns
         
         multiplierResetTime: 15000 
     };
@@ -159,6 +165,10 @@
              osc.type = 'sine'; osc.frequency.setValueAtTime(100, now); osc.frequency.linearRampToValueAtTime(500, now + 1.0);
              gain.gain.setValueAtTime(0.0, now); gain.gain.linearRampToValueAtTime(0.2, now+0.5); gain.gain.linearRampToValueAtTime(0, now+1.0);
              osc.start(now); osc.stop(now+1.0);
+        } else if (type === 'boost') {
+            osc.type = 'sawtooth'; osc.frequency.setValueAtTime(200, now); osc.frequency.linearRampToValueAtTime(800, now + 0.4);
+            gain.gain.setValueAtTime(0.2, now); gain.gain.linearRampToValueAtTime(0, now + 0.4);
+            osc.start(now); osc.stop(now+0.4);
         }
     }
 
@@ -229,8 +239,15 @@
     let blackHoles = []; 
     let particles = [];
     let bgParticles = []; 
+    let fireTrails = []; // Fire booster trails
+    
     let shieldActive = false;
     let invincibilityTimer = 0;
+    
+    // Booster State
+    let boostTimer = 0;
+    let boostOriginalVx = 0;
+    let boostOriginalVy = 0;
 
     function resize() {
         width = window.innerWidth;
@@ -296,7 +313,14 @@
         resumeGame();
     });
 
-    window.addEventListener('click', (e) => {
+    // Tap to Pause (touchstart for instant mobile response)
+    window.addEventListener('touchstart', (e) => {
+        if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return;
+        if (state === 'PLAYING') {
+            pauseGame();
+        }
+    });
+    window.addEventListener('mousedown', (e) => {
         if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return;
         if (state === 'PLAYING') {
             pauseGame();
@@ -338,23 +362,23 @@
         uiPause.style.display = 'none';
         uiCountdown.style.display = 'block';
         
-        // Configure Difficulty
-        // Using VERY SLOW base speeds
+        // Configure Difficulty - SLOWED DOWN
         if(difficultyLevel === 1) { // Easy
             CONFIG.baseSpeed = 0.05;
-            CONFIG.spawnRate = 0.03;
+            CONFIG.spawnRate = 0.02;
         } else if(difficultyLevel === 2) { // Normal
             CONFIG.baseSpeed = 0.1;
-            CONFIG.spawnRate = 0.05;
+            CONFIG.spawnRate = 0.04;
         } else { // Hard
             CONFIG.baseSpeed = 0.15;
-            CONFIG.spawnRate = 0.08;
+            CONFIG.spawnRate = 0.06;
         }
 
         enemies = []; 
         diamonds = []; 
         powerups = [];
         blackHoles = [];
+        fireTrails = [];
         
         if(lives <= 0 || state === 'MENU') {
             lives = 3; score = 0; 
@@ -366,6 +390,7 @@
         player.x = width/2; player.y = height/2;
         player.vx = 0; player.vy = 0;
         shieldActive = false; invincibilityTimer = 0;
+        boostTimer = 0;
         stopStarSound();
 
         updateHUD();
@@ -401,8 +426,8 @@
     function spawnManager() {
         if (state !== 'PLAYING') return;
         
-        // SLOWED SPAWN RAMP (Divided impact of score by 5)
-        let ramp = score * 0.00002; 
+        // Very slow ramp
+        let ramp = score * 0.00001; 
         
         if (Math.random() < CONFIG.spawnRate + ramp) spawnEnemy();
         if (Math.random() < 0.06) spawnDiamond(); 
@@ -418,15 +443,12 @@
         else if(edge === 2) { ex = Math.random() * width; ey = height + 20; }
         else { ex = -20; ey = Math.random() * height; }
         
-        // --- SLOWED DIFFICULTY RAMP ---
         let speed = CONFIG.baseSpeed;
         
         if (difficultyLevel === 1) {
-            // EASY: Log10 with large offset (Very slow)
-            speed += Math.log10(score + 500) * 0.2; 
+            speed += Math.log10(score + 2000) * 0.2; // Even slower ramp
         } else {
-            // NORMAL/HARD: Log with large offset
-            speed += Math.log(score + 500) * 0.2;
+            speed += Math.log(score + 2000) * 0.2;
         }
         
         speed = Math.min(8.0, speed);
@@ -447,9 +469,11 @@
     function spawnPowerup() {
         let r = Math.random();
         let type = 'SHIELD';
-        if (r < 0.4) type = 'SHIELD';
-        else if (r < 0.8) type = 'STAR';
-        else type = 'HOLE';
+        
+        if (r < 0.35) type = 'SHIELD';
+        else if (r < 0.7) type = 'STAR';
+        else if (r < 0.9) type = 'HOLE';
+        else type = 'FIRE'; // 10% chance
 
         powerups.push({ 
             x: Math.random() * (width-40) + 20, 
@@ -467,6 +491,15 @@
             life: CONFIG.blackHoleDuration, 
             angle: 0 
         });
+    }
+
+    function activateFireBooster() {
+        playSound('boost');
+        // Save current speed
+        boostOriginalVx = player.vx;
+        boostOriginalVy = player.vy;
+        boostTimer = CONFIG.fireDuration; // 400ms
+        invincibilityTimer = 400; // Invincible during boost
     }
 
     function getShortestAngleDiff(current, target) {
@@ -492,33 +525,66 @@
     }
 
     function update() {
+        // Multiplier
         let timeSinceScore = Date.now() - lastScoreTime;
         if (timeSinceScore > CONFIG.multiplierResetTime && scoreMultiplier > 1) {
             scoreMultiplier = 1;
             updateHUD();
         }
-        
         let pct = Math.max(0, 100 - (timeSinceScore / CONFIG.multiplierResetTime * 100));
         elMultBar.style.width = pct + "%";
         
-        // Physics
-        let diffX = getShortestAngleDiff(rawTiltBeta, baseTiltBeta); 
-        let diffY = getShortestAngleDiff(rawTiltGamma, baseTiltGamma);
+        // --- PLAYER PHYSICS ---
+        
+        // Handle Fire Booster Logic
+        if (boostTimer > 0) {
+            // 400ms total.
+            // 0-100ms: Accel. 100-300ms: Hold. 300-400ms: Decel
+            let phase = CONFIG.fireDuration - boostTimer;
+            
+            if (phase < 100) {
+                // ACCEL TO MAX SPEED
+                // Use current angle to determine direction
+                player.vx = Math.cos(player.angle) * CONFIG.maxVelocity;
+                player.vy = Math.sin(player.angle) * CONFIG.maxVelocity;
+            } else if (phase < 300) {
+                // HOLD
+            } else {
+                // DECEL to Original (Lerp)
+                let t = (phase - 300) / 100; // 0 to 1
+                player.vx = player.vx * (1-t) + boostOriginalVx * t;
+                player.vy = player.vy * (1-t) + boostOriginalVy * t;
+            }
+            
+            // Drop Trail
+            fireTrails.push({
+                x: player.x,
+                y: player.y,
+                life: CONFIG.fireTrailLife,
+                size: 15 + Math.random() * 10
+            });
+            
+            boostTimer -= 16;
+        } else {
+            // Normal Physics
+            let diffX = getShortestAngleDiff(rawTiltBeta, baseTiltBeta); 
+            let diffY = getShortestAngleDiff(rawTiltGamma, baseTiltGamma);
 
-        let forceX = Math.sign(diffX) * Math.pow(Math.abs(diffX), CONFIG.inputExponent);
-        let forceY = Math.sign(diffY) * Math.pow(Math.abs(diffY), CONFIG.inputExponent);
+            let forceX = Math.sign(diffX) * Math.pow(Math.abs(diffX), CONFIG.inputExponent);
+            let forceY = Math.sign(diffY) * Math.pow(Math.abs(diffY), CONFIG.inputExponent);
 
-        player.vx += forceX * CONFIG.acceleration * orientationSign; 
-        player.vy -= forceY * CONFIG.acceleration * orientationSign; 
+            player.vx += forceX * CONFIG.acceleration * orientationSign; 
+            player.vy -= forceY * CONFIG.acceleration * orientationSign; 
 
-        player.vx *= CONFIG.friction;
-        player.vy *= CONFIG.friction;
+            player.vx *= CONFIG.friction;
+            player.vy *= CONFIG.friction;
 
-        let speed = Math.sqrt(player.vx*player.vx + player.vy*player.vy);
-        if (speed > CONFIG.maxVelocity) {
-            let ratio = CONFIG.maxVelocity / speed;
-            player.vx *= ratio;
-            player.vy *= ratio;
+            let speed = Math.sqrt(player.vx*player.vx + player.vy*player.vy);
+            if (speed > CONFIG.maxVelocity) {
+                let ratio = CONFIG.maxVelocity / speed;
+                player.vx *= ratio;
+                player.vy *= ratio;
+            }
         }
         
         player.x += player.vx;
@@ -542,39 +608,45 @@
             }
         }
 
-        // Black Holes
-        for (let i = blackHoles.length - 1; i >= 0; i--) {
-            let bh = blackHoles[i];
-            
-            bh.angle += 0.2; 
-
-            if (bh.delay > 0) {
-                bh.delay -= 16;
-                continue; 
-            }
-
-            bh.life -= 16;
-            if (bh.life <= 0) {
-                blackHoles.splice(i, 1);
+        // --- FIRE TRAILS ---
+        for (let i = fireTrails.length - 1; i >= 0; i--) {
+            let f = fireTrails[i];
+            f.life -= 16;
+            if (f.life <= 0) {
+                fireTrails.splice(i, 1);
                 continue;
             }
+            
+            // Collision with Enemies
+            for (let j = enemies.length - 1; j >= 0; j--) {
+                let e = enemies[j];
+                if (Math.hypot(f.x - e.x, f.y - e.y) < f.size + e.radius) {
+                    enemies.splice(j, 1);
+                    scorePoints(10);
+                    createExplosion(e.x, e.y, '#e67e22'); // Orange explosion
+                }
+            }
+        }
+
+        // --- BLACK HOLE PHYSICS ---
+        for (let i = blackHoles.length - 1; i >= 0; i--) {
+            let bh = blackHoles[i];
+            bh.angle += 0.2; 
+            if (bh.delay > 0) { bh.delay -= 16; continue; }
+            bh.life -= 16;
+            if (bh.life <= 0) { blackHoles.splice(i, 1); continue; }
 
             for (let j = enemies.length - 1; j >= 0; j--) {
                 let e = enemies[j];
                 let dx = bh.x - e.x;
                 let dy = bh.y - e.y;
                 let distSq = dx*dx + dy*dy;
-                let dist = Math.sqrt(distSq);
-                
-                if (dist < 20) { 
-                    enemies.splice(j, 1);
-                    scorePoints(10); 
-                    playSound('suck');
-                    createExplosion(bh.x, bh.y, '#8e44ad', 5);
+                if (Math.sqrt(distSq) < 20) { 
+                    enemies.splice(j, 1); scorePoints(10); playSound('suck'); createExplosion(bh.x, bh.y, '#8e44ad', 5);
                 } else {
                     let f = (CONFIG.blackHoleForce * 1500) / Math.max(distSq, 100);
-                    e.x += (dx / dist) * f;
-                    e.y += (dy / dist) * f;
+                    e.x += (dx / Math.sqrt(distSq)) * f;
+                    e.y += (dy / Math.sqrt(distSq)) * f;
                 }
             }
 
@@ -584,15 +656,11 @@
                 let dy = bh.y - d.y;
                 let distSq = dx*dx + dy*dy;
                 if (distSq < 400) {
-                    diamonds.splice(j, 1);
-                    scorePoints(1); 
-                    increaseMultiplier(); 
-                    playSound('suck');
+                    diamonds.splice(j, 1); scorePoints(1); increaseMultiplier(); playSound('suck');
                 } else {
-                    let dist = Math.sqrt(distSq);
                     let f = (CONFIG.blackHoleForce * 1000) / Math.max(distSq, 100);
-                    d.x += (dx / dist) * f;
-                    d.y += (dy / dist) * f;
+                    d.x += (dx / Math.sqrt(distSq)) * f;
+                    d.y += (dy / Math.sqrt(distSq)) * f;
                 }
             }
             
@@ -605,7 +673,7 @@
             player.vy += (pdy / pDist) * pf;
         }
 
-        // Collisions
+        // --- COLLISIONS ---
         for (let i = enemies.length - 1; i >= 0; i--) {
             let e = enemies[i];
             
@@ -622,10 +690,7 @@
             e.x += e.vx;
             e.y += e.vy;
             
-            // HITBOX CHECK
-            // Use Larger Radius if Shield is Active
             let hitDist = (shieldActive) ? CONFIG.shieldRadius : (player.size * CONFIG.hitboxRatio);
-
             let pDist = Math.hypot(player.x - e.x, player.y - e.y);
 
             if (pDist < hitDist + e.radius) {
@@ -647,7 +712,6 @@
 
         for (let i = diamonds.length - 1; i >= 0; i--) {
             let d = diamonds[i];
-            
             d.x += d.vx; d.y += d.vy;
             if(d.x < 0 || d.x > width) d.vx *= -1;
             if(d.y < 0 || d.y > height) d.vy *= -1;
@@ -671,9 +735,8 @@
                     invincibilityTimer = CONFIG.invincibilityTime;
                     startStarSound(); 
                 }
-                if(p.type === 'HOLE') {
-                    spawnBlackHole(p.x, p.y);
-                }
+                if(p.type === 'HOLE') spawnBlackHole(p.x, p.y);
+                if(p.type === 'FIRE') activateFireBooster();
                 powerups.splice(i, 1);
             }
         }
@@ -749,6 +812,7 @@
     }
 
     function draw() {
+        // --- BACKGROUND ---
         let grd = ctx.createRadialGradient(width/2, height/2, 0, width/2, height/2, width);
         grd.addColorStop(0, '#145a14'); 
         grd.addColorStop(1, '#051e11'); 
@@ -778,6 +842,21 @@
             }
         });
 
+        // --- FIRE TRAIL ---
+        fireTrails.forEach(f => {
+            let alpha = f.life / CONFIG.fireTrailLife;
+            ctx.fillStyle = `rgba(230, 126, 34, ${alpha})`;
+            ctx.beginPath();
+            ctx.arc(f.x, f.y, f.size, 0, Math.PI*2);
+            ctx.fill();
+            // Inner Yellow
+            ctx.fillStyle = `rgba(241, 196, 15, ${alpha})`;
+            ctx.beginPath();
+            ctx.arc(f.x, f.y, f.size * 0.6, 0, Math.PI*2);
+            ctx.fill();
+        });
+
+        // --- BLACK HOLES ---
         blackHoles.forEach(bh => {
             if (bh.delay > 0) {
                 let progress = 1 - (bh.delay / CONFIG.blackHoleDelay);
@@ -811,6 +890,7 @@
             }
         });
 
+        // --- ITEMS ---
         diamonds.forEach(d => {
             ctx.fillStyle = '#f1c40f';
             ctx.beginPath();
@@ -835,25 +915,20 @@
             } else if (p.type === 'STAR') {
                 ctx.fillStyle = '#f39c12';
                 ctx.fill(); ctx.fillStyle = 'white'; ctx.font = '8px Arial'; ctx.fillText("★", p.x-3, p.y+3);
-            } else {
-                ctx.fillStyle = '#2c3e50'; 
-                ctx.fill();
-                ctx.strokeStyle = '#8e44ad'; 
-                ctx.lineWidth = 3;
-                ctx.stroke();
+            } else if (p.type === 'HOLE') {
+                ctx.fillStyle = '#2c3e50'; ctx.fill(); ctx.strokeStyle = '#8e44ad'; ctx.lineWidth = 3; ctx.stroke();
+            } else if (p.type === 'FIRE') {
+                ctx.fillStyle = '#e67e22'; ctx.fill(); ctx.strokeStyle = '#f1c40f'; ctx.lineWidth = 2; ctx.stroke();
             }
         });
 
-        // Red Dots with Outline
+        // --- ENEMIES ---
         enemies.forEach(e => {
             ctx.fillStyle = '#e74c3c';
             ctx.beginPath();
             ctx.arc(e.x, e.y, e.radius, 0, Math.PI*2);
             ctx.fill();
-            
-            ctx.strokeStyle = 'white';
-            ctx.lineWidth = 1.5;
-            ctx.stroke();
+            ctx.strokeStyle = 'white'; ctx.lineWidth = 1.5; ctx.stroke();
         });
 
         particles.forEach(p => {
@@ -871,7 +946,7 @@
             
             if (shieldActive) {
                 ctx.strokeStyle = '#3498db'; ctx.lineWidth = 3;
-                ctx.beginPath(); ctx.arc(0,0, 20, 0, Math.PI*2); ctx.stroke(); // 20 radius visual
+                ctx.beginPath(); ctx.arc(0,0, 20, 0, Math.PI*2); ctx.stroke();
             }
             if (invincibilityTimer > 0) {
                  if (Math.floor(Date.now() / 50) % 2 === 0) ctx.fillStyle = '#f1c40f';
