@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Tilt Survival: Radioactive</title>
+    <title>Tilt Survival: Deluxe</title>
     <style>
         /* Radioactive Green Background Base */
         body { margin: 0; overflow: hidden; background: #051e11; font-family: -apple-system, BlinkMacSystemFont, sans-serif; touch-action: none; user-select: none; -webkit-user-select: none; }
@@ -21,13 +21,19 @@
         #combo-display { color: #f1c40f; font-size: 24px; text-shadow: 0 0 10px rgba(241, 196, 15, 0.5); transition: transform 0.1s; }
         .pulse { transform: scale(1.5); }
 
+        /* Controls */
         button { pointer-events: auto; padding: 15px 40px; font-size: 24px; background: #27ae60; color: white; border: none; border-radius: 50px; cursor: pointer; box-shadow: 0 6px 0 #219150; transition: transform 0.1s, box-shadow 0.1s; font-weight: bold; }
         button:active { transform: translateY(4px); box-shadow: 0 2px 0 #219150; }
         button.red { background: #c0392b; box-shadow: 0 6px 0 #962d22; }
         button.red:active { box-shadow: 0 2px 0 #962d22; }
 
+        /* Slider Styling */
+        .slider-container { margin-bottom: 20px; pointer-events: auto; width: 200px; }
+        input[type=range] { width: 100%; }
+        .diff-label { color: #f1c40f; font-weight: bold; margin-top: 5px; display: block;}
+
         /* Screens */
-        #start-screen, #game-over, #pause-screen { pointer-events: auto; background: rgba(5, 30, 17, 0.9); padding: 30px; border-radius: 20px; border: 2px solid #7fff00; box-shadow: 0 0 20px rgba(127, 255, 0, 0.2); }
+        #start-screen, #game-over, #pause-screen { pointer-events: auto; background: rgba(5, 30, 17, 0.95); padding: 30px; border-radius: 20px; border: 2px solid #7fff00; box-shadow: 0 0 20px rgba(127, 255, 0, 0.2); }
         #pause-screen { display: none; }
         #rotate-msg { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #051e11; z-index: 999; color: white; flex-direction: column; justify-content: center; align-items: center; }
         
@@ -58,6 +64,13 @@
         <div id="start-screen">
             <h1>Tilt Survival</h1>
             <p>• Tilt to Accelerate<br>• Collect Yellow Diamonds<br>• Grab the Black Hole!</p>
+            
+            <div class="slider-container">
+                <label for="diff-slider" style="color:white">Difficulty</label>
+                <input type="range" min="1" max="3" value="2" id="diff-slider">
+                <span id="diff-val" class="diff-label">NORMAL</span>
+            </div>
+
             <button id="start-btn">TAP TO START</button>
             <p style="font-size: 12px; margin-top: 15px; color: #7fff00;">(Turn sound on!)</p>
         </div>
@@ -85,7 +98,10 @@
         inputExponent: 1.5,     
         maxVelocity: 11.0,      
         
-        enemyBaseSpeed: 0.1,    // REDUCED to 1/10th (was 1.0)
+        // Enemy settings now dynamic based on Difficulty
+        baseSpeed: 0.1, 
+        spawnRate: 0.05,
+        
         hitboxRatio: 0.55,
         diamondHitbox: 12,      
         invincibilityTime: 5000,
@@ -189,6 +205,11 @@
     const rotateMsg = document.getElementById('rotate-msg');
     const elMultBar = document.getElementById('mult-bar-fill');
     const elMultContainer = document.getElementById('mult-bar-container');
+    
+    // Difficulty Controls
+    const slider = document.getElementById('diff-slider');
+    const diffVal = document.getElementById('diff-val');
+    let difficultyLevel = 2; // 1=Easy, 2=Normal, 3=Hard
 
     let state = 'MENU'; 
     let width, height;
@@ -247,13 +268,22 @@
         bgParticles.push({
             x: Math.random() * window.innerWidth,
             y: Math.random() * window.innerHeight,
-            size: Math.random() * 25 + 5, // Slightly larger
+            size: Math.random() * 25 + 5,
             speed: Math.random() * 0.4 + 0.1,
             type: Math.random() < 0.5 ? 'square' : 'triangle'
         });
     }
 
     // --- INPUTS ---
+    
+    // Slider Logic
+    slider.addEventListener('input', (e) => {
+        difficultyLevel = parseInt(e.target.value);
+        if(difficultyLevel === 1) diffVal.innerText = "EASY";
+        else if(difficultyLevel === 2) diffVal.innerText = "NORMAL";
+        else diffVal.innerText = "HARD";
+    });
+
     document.getElementById('start-btn').addEventListener('click', (e) => {
         e.stopPropagation(); 
         unlockAudio(); 
@@ -273,7 +303,7 @@
 
     // Tap to Pause
     window.addEventListener('click', (e) => {
-        if (e.target.tagName === 'BUTTON') return;
+        if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return;
         if (state === 'PLAYING') {
             pauseGame();
         }
@@ -314,6 +344,18 @@
         uiPause.style.display = 'none';
         uiCountdown.style.display = 'block';
         
+        // Configure Difficulty
+        if(difficultyLevel === 1) { // Easy
+            CONFIG.baseSpeed = 0.05;
+            CONFIG.spawnRate = 0.03;
+        } else if(difficultyLevel === 2) { // Normal
+            CONFIG.baseSpeed = 0.1;
+            CONFIG.spawnRate = 0.05;
+        } else { // Hard
+            CONFIG.baseSpeed = 0.15;
+            CONFIG.spawnRate = 0.08;
+        }
+
         enemies = []; 
         diamonds = []; 
         powerups = [];
@@ -363,7 +405,7 @@
 
     function spawnManager() {
         if (state !== 'PLAYING') return;
-        if (Math.random() < 0.05 + (score * 0.0001)) spawnEnemy();
+        if (Math.random() < CONFIG.spawnRate + (score * 0.0001)) spawnEnemy();
         if (Math.random() < 0.06) spawnDiamond(); 
         if (Math.random() < 0.016) spawnPowerup(); 
         setTimeout(spawnManager, 100); 
@@ -377,8 +419,19 @@
         else if(edge === 2) { ex = Math.random() * width; ey = height + 20; }
         else { ex = -20; ey = Math.random() * height; }
         
-        let logFactor = Math.log(score + 10); 
-        let speed = Math.min(8.0, CONFIG.enemyBaseSpeed + (logFactor * 0.5));
+        // --- SPEED FORMULA BASED ON DIFFICULTY ---
+        let speed = CONFIG.baseSpeed;
+        
+        if (difficultyLevel === 1) {
+            // EASY: Log Base 10 (Very slow growth)
+            speed += Math.log10(score + 10) * 0.5;
+        } else {
+            // NORMAL/HARD: Natural Log (Faster growth)
+            speed += Math.log(score + 10) * 0.5;
+        }
+        
+        // Cap max speed
+        speed = Math.min(8.0, speed);
         
         enemies.push({ x: ex, y: ey, speed: speed, vx: 0, vy: 0, radius: 6 });
     }
@@ -571,7 +624,7 @@
                 e.vx = (dx / dist) * e.speed;
                 e.vy = (dy / dist) * e.speed;
             } else {
-                e.vx *= 0.95; e.vy *= 0.95; // Drift
+                e.vx *= 0.95; e.vy *= 0.95; 
             }
             
             e.x += e.vx;
@@ -582,7 +635,7 @@
             if (pDist < (player.size + e.radius) * CONFIG.hitboxRatio) {
                 if (invincibilityTimer > 0) {
                     enemies.splice(i, 1);
-                    scorePoints(10); // 10 Points for killing enemy
+                    scorePoints(10); 
                     createExplosion(e.x, e.y, '#f1c40f');
                     playSound('crash');
                 } else if (shieldActive) {
@@ -599,9 +652,7 @@
         for (let i = diamonds.length - 1; i >= 0; i--) {
             let d = diamonds[i];
             
-            // Drifting Logic
-            d.x += d.vx;
-            d.y += d.vy;
+            d.x += d.vx; d.y += d.vy;
             if(d.x < 0 || d.x > width) d.vx *= -1;
             if(d.y < 0 || d.y > height) d.vy *= -1;
 
@@ -643,7 +694,7 @@
             let e = enemies[i];
             if (Math.hypot(player.x - e.x, player.y - e.y) < range) {
                 enemies.splice(i, 1);
-                scorePoints(10); // Points for Shield Kill
+                scorePoints(10); 
                 createExplosion(e.x, e.y, '#e74c3c');
             }
         }
@@ -702,15 +753,13 @@
     }
 
     function draw() {
-        // --- BACKGROUND (GLOWING GEL) ---
-        // Create radial gradient
+        // --- BACKGROUND ---
         let grd = ctx.createRadialGradient(width/2, height/2, 0, width/2, height/2, width);
-        grd.addColorStop(0, '#145a14'); // Center glow
-        grd.addColorStop(1, '#051e11'); // Dark edges
+        grd.addColorStop(0, '#145a14'); 
+        grd.addColorStop(1, '#051e11'); 
         ctx.fillStyle = grd;
         ctx.fillRect(0, 0, width, height);
         
-        // Parallax Grid (Brighter Green)
         ctx.strokeStyle = 'rgba(127, 255, 0, 0.15)';
         ctx.lineWidth = 2;
         const gridSize = 80;
@@ -722,8 +771,8 @@
         for (let y = offsetY; y < height; y += gridSize) { ctx.moveTo(0, y); ctx.lineTo(width, y); }
         ctx.stroke();
 
-        // BG Particles (Brighter)
-        ctx.fillStyle = 'rgba(127, 255, 0, 0.2)';
+        // Reduced BG Visibility
+        ctx.fillStyle = 'rgba(127, 255, 0, 0.1)';
         bgParticles.forEach(p => {
             ctx.beginPath();
             if(p.type === 'square') ctx.fillRect(p.x, p.y, p.size, p.size);
@@ -735,10 +784,9 @@
             }
         });
 
-        // --- BLACK HOLES (Swirling Vortex) ---
+        // --- BLACK HOLES ---
         blackHoles.forEach(bh => {
             if (bh.delay > 0) {
-                // CHARGING
                 let progress = 1 - (bh.delay / CONFIG.blackHoleDelay);
                 ctx.strokeStyle = `rgba(142, 68, 173, ${progress})`;
                 ctx.lineWidth = 3;
@@ -748,13 +796,11 @@
                 ctx.fillStyle = `rgba(142, 68, 173, ${progress * 0.5})`;
                 ctx.fill();
             } else {
-                // ACTIVE SPRIAL
                 ctx.fillStyle = 'rgba(0, 0, 0, 0.9)';
                 ctx.beginPath();
                 ctx.arc(bh.x, bh.y, 15, 0, Math.PI*2);
                 ctx.fill();
                 
-                // SPIRAL ARMS
                 ctx.strokeStyle = '#9b59b6';
                 ctx.lineWidth = 2;
                 for(let i=0; i<5; i++) {
@@ -773,14 +819,21 @@
         });
 
         // --- ITEMS ---
-        ctx.fillStyle = '#f1c40f';
+        // Diamonds with sparkle
         diamonds.forEach(d => {
+            ctx.fillStyle = '#f1c40f';
             ctx.beginPath();
             ctx.moveTo(d.x, d.y - d.radius);
             ctx.lineTo(d.x + d.radius, d.y);
             ctx.lineTo(d.x, d.y + d.radius);
             ctx.lineTo(d.x - d.radius, d.y);
             ctx.fill();
+            
+            // Random Sparkle
+            if(Math.random() < 0.05) {
+                ctx.fillStyle = 'white';
+                ctx.fillRect(d.x - 2, d.y - 2, 4, 4);
+            }
         });
 
         powerups.forEach(p => {
@@ -802,12 +855,16 @@
             }
         });
 
-        // --- ENEMIES ---
-        ctx.fillStyle = '#e74c3c';
+        // --- ENEMIES (With Outline) ---
         enemies.forEach(e => {
+            ctx.fillStyle = '#e74c3c';
             ctx.beginPath();
             ctx.arc(e.x, e.y, e.radius, 0, Math.PI*2);
             ctx.fill();
+            
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
         });
 
         particles.forEach(p => {
