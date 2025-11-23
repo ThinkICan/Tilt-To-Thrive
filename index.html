@@ -3,35 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Tilt Survival: Multiplier</title>
+    <title>Tilt Survival: Deep Green</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #2c3e50; font-family: -apple-system, BlinkMacSystemFont, sans-serif; touch-action: none; user-select: none; -webkit-user-select: none; }
+        /* Dark Green Background */
+        body { margin: 0; overflow: hidden; background: #051e11; font-family: -apple-system, BlinkMacSystemFont, sans-serif; touch-action: none; user-select: none; -webkit-user-select: none; }
         canvas { display: block; }
         #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
         
-        h1 { font-size: 40px; margin: 0 0 10px 0; color: #ecf0f1; text-shadow: 2px 2px 0px #2c3e50; }
+        h1 { font-size: 40px; margin: 0 0 10px 0; color: #ecf0f1; text-shadow: 2px 2px 0px #000; }
         h2 { font-size: 80px; color: #f1c40f; margin: 0; text-shadow: 4px 4px 0px #000; display: none; }
-        p { font-size: 16px; color: #bdc3c7; margin-bottom: 20px; }
+        p { font-size: 16px; color: #a3cfb3; margin-bottom: 20px; } /* Greenish text */
         
         #hud-top { position: absolute; top: 10px; left: 15px; right: 15px; display: flex; justify-content: space-between; pointer-events: none; }
         .hud-text { font-size: 20px; font-weight: bold; color: #ecf0f1; font-family: monospace; }
         
-        /* Multiplier Style */
         #combo-display { color: #f1c40f; font-size: 24px; text-shadow: 0 0 10px rgba(241, 196, 15, 0.5); transition: transform 0.1s; }
         .pulse { transform: scale(1.5); }
 
-        button { pointer-events: auto; padding: 15px 40px; font-size: 24px; background: #3498db; color: white; border: none; border-radius: 50px; cursor: pointer; box-shadow: 0 6px 0 #2980b9; transition: transform 0.1s, box-shadow 0.1s; font-weight: bold; }
-        button:active { transform: translateY(4px); box-shadow: 0 2px 0 #2980b9; }
-        button.red { background: #e74c3c; box-shadow: 0 6px 0 #c0392b; }
-        button.red:active { box-shadow: 0 2px 0 #c0392b; }
+        button { pointer-events: auto; padding: 15px 40px; font-size: 24px; background: #27ae60; color: white; border: none; border-radius: 50px; cursor: pointer; box-shadow: 0 6px 0 #219150; transition: transform 0.1s, box-shadow 0.1s; font-weight: bold; }
+        button:active { transform: translateY(4px); box-shadow: 0 2px 0 #219150; }
+        button.red { background: #c0392b; box-shadow: 0 6px 0 #962d22; }
+        button.red:active { box-shadow: 0 2px 0 #962d22; }
 
         /* Screens */
-        #start-screen, #game-over, #pause-screen { pointer-events: auto; background: rgba(44, 62, 80, 0.95); padding: 30px; border-radius: 20px; border: 2px solid #34495e; }
+        #start-screen, #game-over, #pause-screen { pointer-events: auto; background: rgba(10, 40, 20, 0.95); padding: 30px; border-radius: 20px; border: 2px solid #27ae60; }
         #pause-screen { display: none; }
-        #rotate-msg { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #2c3e50; z-index: 999; color: white; flex-direction: column; justify-content: center; align-items: center; }
+        #rotate-msg { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #051e11; z-index: 999; color: white; flex-direction: column; justify-content: center; align-items: center; }
         
         /* Multiplier Bar */
-        #mult-bar-container { position: absolute; top: 40px; left: 15px; width: 100px; height: 4px; background: rgba(255,255,255,0.2); border-radius: 2px; display: none; }
+        #mult-bar-container { position: absolute; top: 40px; left: 15px; width: 100px; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; display: none; }
         #mult-bar-fill { height: 100%; width: 100%; background: #f1c40f; border-radius: 2px; transition: width 0.1s linear; }
     </style>
 </head>
@@ -56,9 +56,9 @@
 
         <div id="start-screen">
             <h1>Tilt Survival</h1>
-            <p>• Tilt to Accelerate<br>• Yellow Diamonds Boost Multiplier<br>• Don't lose your streak!</p>
+            <p>• Tilt to Accelerate<br>• Collect Yellow Diamonds<br>• Grab the Black Hole!</p>
             <button id="start-btn">TAP TO START</button>
-            <p style="font-size: 12px; margin-top: 15px; color: #7f8c8d;">(Turn sound on!)</p>
+            <p style="font-size: 12px; margin-top: 15px; color: #5da878;">(Turn sound on!)</p>
         </div>
 
         <div id="pause-screen">
@@ -84,15 +84,15 @@
         inputExponent: 1.5,     
         maxVelocity: 11.0,      
         
-        enemyBaseSpeed: 1.0,    // Slower start
+        enemyBaseSpeed: 1.0,    
         hitboxRatio: 0.55,
         diamondHitbox: 12,      
         invincibilityTime: 5000,
         blackHoleDuration: 10000,
         blackHoleDelay: 2000,   
-        blackHoleForce: 0.6,    // Increased by 20% (was 0.5)
+        blackHoleForce: 0.6,    
         
-        multiplierResetTime: 15000 // 15 Seconds to keep streak
+        multiplierResetTime: 15000 
     };
 
     // --- AUDIO ENGINE ---
@@ -242,7 +242,7 @@
     resize();
 
     // Background Init
-    for(let i=0; i<20; i++) {
+    for(let i=0; i<25; i++) {
         bgParticles.push({
             x: Math.random() * window.innerWidth,
             y: Math.random() * window.innerHeight,
@@ -320,13 +320,10 @@
         
         if(lives <= 0 || state === 'MENU') {
             lives = 3; score = 0; 
-            scoreMultiplier = 1; // Reset multiplier on full game over
+            scoreMultiplier = 1; 
         }
-        // Don't reset multiplier on just a life loss? Or yes?
-        // User said "if no points are scored for 15 seconds, reset".
-        // Dying consumes time, so it naturally resets if you take too long.
         
-        lastScoreTime = Date.now(); // Gives grace period on start
+        lastScoreTime = Date.now();
         
         player.x = width/2; player.y = height/2;
         player.vx = 0; player.vy = 0;
@@ -358,7 +355,6 @@
                     uiCountdown.style.display = 'none';
                     state = 'PLAYING';
                     spawnManager();
-                    // Loop is global
                 }, 500);
             }
         }, 1000);
@@ -380,12 +376,11 @@
         else if(edge === 2) { ex = Math.random() * width; ey = height + 20; }
         else { ex = -20; ey = Math.random() * height; }
         
-        // --- NEW SPEED FUNCTION ---
-        // Sqrt(Score) function. 
-        // Score 0 -> Speed 1.0
-        // Score 100 -> Speed 1.0 + 1.0 = 2.0
-        // Score 1000 -> Speed 1.0 + 3.1 = 4.1
-        let speed = Math.min(8.0, CONFIG.enemyBaseSpeed + (Math.sqrt(score) * 0.1));
+        // --- NEW SPEED FORMULA (LOGARITHMIC) ---
+        // Use natural log of score. Adding 10 prevents log(0) and gives base speed.
+        // Multiplier 0.5 controls the growth rate.
+        let logFactor = Math.log(score + 10); 
+        let speed = Math.min(8.0, CONFIG.enemyBaseSpeed + (logFactor * 0.5));
         
         enemies.push({ x: ex, y: ey, speed: speed, vx: 0, vy: 0, radius: 6 });
     }
@@ -395,7 +390,7 @@
         diamonds.push({ 
             x: Math.random() * (width-40) + 20, 
             y: Math.random() * (height-40) + 20, 
-            vx: (Math.random() - 0.5) * 0.5, // Slow drift
+            vx: (Math.random() - 0.5) * 0.5, 
             vy: (Math.random() - 0.5) * 0.5,
             radius: 7.5 
         });
@@ -405,7 +400,6 @@
         let r = Math.random();
         let type = 'SHIELD';
         
-        // 20% Vortex, 40% Shield, 40% Star
         if (r < 0.4) type = 'SHIELD';
         else if (r < 0.8) type = 'STAR';
         else type = 'HOLE';
@@ -443,7 +437,6 @@
 
     function increaseMultiplier() {
         scoreMultiplier++;
-        // Pulse animation
         elCombo.classList.remove('pulse');
         void elCombo.offsetWidth; // Trigger reflow
         elCombo.classList.add('pulse');
@@ -550,7 +543,7 @@
                 if (distSq < 400) {
                     diamonds.splice(j, 1);
                     scorePoints(1); // Base points
-                    increaseMultiplier(); // Black hole eating diamond boosts mult
+                    increaseMultiplier(); 
                     playSound('suck');
                 } else {
                     let dist = Math.sqrt(distSq);
@@ -591,7 +584,7 @@
             if (pDist < (player.size + e.radius) * CONFIG.hitboxRatio) {
                 if (invincibilityTimer > 0) {
                     enemies.splice(i, 1);
-                    scorePoints(10);
+                    scorePoints(10); // 10 Points for killing enemy
                     createExplosion(e.x, e.y, '#f1c40f');
                     playSound('crash');
                 } else if (shieldActive) {
@@ -616,8 +609,8 @@
 
             let dist = Math.hypot(player.x - d.x, player.y - d.y);
             if (dist < player.size + CONFIG.diamondHitbox) {
-                scorePoints(1); // Score base points
-                increaseMultiplier(); // Increase mult
+                scorePoints(1); 
+                increaseMultiplier(); 
                 playSound('coin');
                 diamonds.splice(i, 1);
             }
@@ -652,7 +645,7 @@
             let e = enemies[i];
             if (Math.hypot(player.x - e.x, player.y - e.y) < range) {
                 enemies.splice(i, 1);
-                scorePoints(10);
+                scorePoints(10); // Points for Shield Kill
                 createExplosion(e.x, e.y, '#e74c3c');
             }
         }
@@ -703,7 +696,7 @@
     function updateHUD() {
         elScore.innerText = "SCORE: " + score;
         elCombo.innerText = scoreMultiplier + "x";
-        elMultContainer.style.display = 'block'; // Show bar
+        elMultContainer.style.display = 'block'; 
         
         let hearts = "";
         for(let i=0; i<lives; i++) hearts += "❤";
@@ -711,11 +704,12 @@
     }
 
     function draw() {
-        // --- BACKGROUND ---
-        ctx.fillStyle = '#2c3e50';
+        // --- BACKGROUND (DEEP GREEN) ---
+        ctx.fillStyle = '#051e11';
         ctx.fillRect(0, 0, width, height);
         
-        ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+        // Parallax Grid (Teal)
+        ctx.strokeStyle = 'rgba(46, 204, 113, 0.08)';
         ctx.lineWidth = 2;
         const gridSize = 80;
         const offsetX = -(player.x * 0.15) % gridSize;
@@ -726,7 +720,8 @@
         for (let y = offsetY; y < height; y += gridSize) { ctx.moveTo(0, y); ctx.lineTo(width, y); }
         ctx.stroke();
 
-        ctx.fillStyle = 'rgba(255,255,255,0.05)';
+        // BG Particles
+        ctx.fillStyle = 'rgba(46, 204, 113, 0.1)';
         bgParticles.forEach(p => {
             ctx.beginPath();
             if(p.type === 'square') ctx.fillRect(p.x, p.y, p.size, p.size);
@@ -738,10 +733,10 @@
             }
         });
 
-        // --- BLACK HOLES ---
+        // --- BLACK HOLES (Swirling Vortex) ---
         blackHoles.forEach(bh => {
             if (bh.delay > 0) {
-                // CHARGING ANIMATION
+                // CHARGING
                 let progress = 1 - (bh.delay / CONFIG.blackHoleDelay);
                 ctx.strokeStyle = `rgba(142, 68, 173, ${progress})`;
                 ctx.lineWidth = 3;
@@ -751,23 +746,27 @@
                 ctx.fillStyle = `rgba(142, 68, 173, ${progress * 0.5})`;
                 ctx.fill();
             } else {
-                // ACTIVE VORTEX ANIMATION
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+                // ACTIVE SPRIAL
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.9)';
                 ctx.beginPath();
                 ctx.arc(bh.x, bh.y, 15, 0, Math.PI*2);
                 ctx.fill();
                 
-                ctx.strokeStyle = '#8e44ad';
+                // SPIRAL ARMS
+                ctx.strokeStyle = '#9b59b6';
                 ctx.lineWidth = 2;
-                ctx.beginPath();
-                for(let i=0; i<3; i++) {
-                    let offset = (Math.PI*2/3) * i;
-                    let r = 25;
-                    let a = bh.angle + offset;
-                    ctx.moveTo(bh.x + Math.cos(a)*r, bh.y + Math.sin(a)*r);
-                    ctx.lineTo(bh.x, bh.y);
+                for(let i=0; i<5; i++) {
+                    let angleOffset = (Math.PI * 2 / 5) * i + bh.angle;
+                    ctx.beginPath();
+                    for(let r=5; r<30; r+=2) {
+                        let a = angleOffset + (r * 0.2); 
+                        let px = bh.x + Math.cos(a) * r;
+                        let py = bh.y + Math.sin(a) * r;
+                        if (r===5) ctx.moveTo(px, py);
+                        else ctx.lineTo(px, py);
+                    }
+                    ctx.stroke();
                 }
-                ctx.stroke();
             }
         });
 
