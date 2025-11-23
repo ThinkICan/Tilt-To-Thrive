@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Tilt Survival: Exponential</title>
+    <title>Tilt Survival: Multiplier</title>
     <style>
         body { margin: 0; overflow: hidden; background: #2c3e50; font-family: -apple-system, BlinkMacSystemFont, sans-serif; touch-action: none; user-select: none; -webkit-user-select: none; }
         canvas { display: block; }
@@ -15,7 +15,10 @@
         
         #hud-top { position: absolute; top: 10px; left: 15px; right: 15px; display: flex; justify-content: space-between; pointer-events: none; }
         .hud-text { font-size: 20px; font-weight: bold; color: #ecf0f1; font-family: monospace; }
-        #combo-text { color: #2ecc71; font-size: 16px; display: none;}
+        
+        /* Multiplier Style */
+        #combo-display { color: #f1c40f; font-size: 24px; text-shadow: 0 0 10px rgba(241, 196, 15, 0.5); transition: transform 0.1s; }
+        .pulse { transform: scale(1.5); }
 
         button { pointer-events: auto; padding: 15px 40px; font-size: 24px; background: #3498db; color: white; border: none; border-radius: 50px; cursor: pointer; box-shadow: 0 6px 0 #2980b9; transition: transform 0.1s, box-shadow 0.1s; font-weight: bold; }
         button:active { transform: translateY(4px); box-shadow: 0 2px 0 #2980b9; }
@@ -26,6 +29,10 @@
         #start-screen, #game-over, #pause-screen { pointer-events: auto; background: rgba(44, 62, 80, 0.95); padding: 30px; border-radius: 20px; border: 2px solid #34495e; }
         #pause-screen { display: none; }
         #rotate-msg { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #2c3e50; z-index: 999; color: white; flex-direction: column; justify-content: center; align-items: center; }
+        
+        /* Multiplier Bar */
+        #mult-bar-container { position: absolute; top: 40px; left: 15px; width: 100px; height: 4px; background: rgba(255,255,255,0.2); border-radius: 2px; display: none; }
+        #mult-bar-fill { height: 100%; width: 100%; background: #f1c40f; border-radius: 2px; transition: width 0.1s linear; }
     </style>
 </head>
 <body>
@@ -38,7 +45,8 @@
     <div id="hud-top">
         <div style="text-align:left;">
             <div id="score-display" class="hud-text">SCORE: 0</div>
-            <div id="combo-display" class="hud-text" style="color:#2ecc71; font-size:14px; opacity:0;">x1 COMBO</div>
+            <div id="combo-display" class="hud-text">1x</div>
+            <div id="mult-bar-container"><div id="mult-bar-fill"></div></div>
         </div>
         <div id="lives-display" class="hud-text">❤❤❤</div>
     </div>
@@ -48,7 +56,7 @@
 
         <div id="start-screen">
             <h1>Tilt Survival</h1>
-            <p>• Tilt to Accelerate<br>• Collect Yellow Diamonds<br>• Grab the Black Hole!</p>
+            <p>• Tilt to Accelerate<br>• Yellow Diamonds Boost Multiplier<br>• Don't lose your streak!</p>
             <button id="start-btn">TAP TO START</button>
             <p style="font-size: 12px; margin-top: 15px; color: #7f8c8d;">(Turn sound on!)</p>
         </div>
@@ -72,17 +80,19 @@
     // --- CONFIG ---
     const CONFIG = {
         friction: 0.95,         
-        acceleration: 0.005,    // Lower base (was 0.006) to balance the higher exponent
-        inputExponent: 1.5,     // Steeper curve (was 1.1). Low tilt = gentle. High tilt = FAST.
+        acceleration: 0.005,    
+        inputExponent: 1.5,     
         maxVelocity: 11.0,      
         
-        enemyBaseSpeed: 1.5,
+        enemyBaseSpeed: 1.0,    // Slower start
         hitboxRatio: 0.55,
         diamondHitbox: 12,      
         invincibilityTime: 5000,
         blackHoleDuration: 10000,
         blackHoleDelay: 2000,   
-        blackHoleForce: 0.5     
+        blackHoleForce: 0.6,    // Increased by 20% (was 0.5)
+        
+        multiplierResetTime: 15000 // 15 Seconds to keep streak
     };
 
     // --- AUDIO ENGINE ---
@@ -176,13 +186,18 @@
     const elCombo = document.getElementById('combo-display');
     const elLives = document.getElementById('lives-display');
     const rotateMsg = document.getElementById('rotate-msg');
+    const elMultBar = document.getElementById('mult-bar-fill');
+    const elMultContainer = document.getElementById('mult-bar-container');
 
     let state = 'MENU'; 
     let width, height;
     let lives = 3;
     let score = 0;
-    let combo = 1;
     let orientationSign = 1;
+
+    // SCORING STATE
+    let scoreMultiplier = 1;
+    let lastScoreTime = 0;
 
     let rawTiltBeta = 0, rawTiltGamma = 0; 
     let baseTiltBeta = 0, baseTiltGamma = 0; 
@@ -304,8 +319,14 @@
         blackHoles = [];
         
         if(lives <= 0 || state === 'MENU') {
-            lives = 3; score = 0; combo = 1;
+            lives = 3; score = 0; 
+            scoreMultiplier = 1; // Reset multiplier on full game over
         }
+        // Don't reset multiplier on just a life loss? Or yes?
+        // User said "if no points are scored for 15 seconds, reset".
+        // Dying consumes time, so it naturally resets if you take too long.
+        
+        lastScoreTime = Date.now(); // Gives grace period on start
         
         player.x = width/2; player.y = height/2;
         player.vx = 0; player.vy = 0;
@@ -337,7 +358,7 @@
                     uiCountdown.style.display = 'none';
                     state = 'PLAYING';
                     spawnManager();
-                    // NOTE: Loop is handled by global requestAnimationFrame now, no need to call loop() here
+                    // Loop is global
                 }, 500);
             }
         }, 1000);
@@ -359,15 +380,23 @@
         else if(edge === 2) { ex = Math.random() * width; ey = height + 20; }
         else { ex = -20; ey = Math.random() * height; }
         
-        let speed = Math.min(8.0, CONFIG.enemyBaseSpeed + (score * 0.002));
+        // --- NEW SPEED FUNCTION ---
+        // Sqrt(Score) function. 
+        // Score 0 -> Speed 1.0
+        // Score 100 -> Speed 1.0 + 1.0 = 2.0
+        // Score 1000 -> Speed 1.0 + 3.1 = 4.1
+        let speed = Math.min(8.0, CONFIG.enemyBaseSpeed + (Math.sqrt(score) * 0.1));
         
         enemies.push({ x: ex, y: ey, speed: speed, vx: 0, vy: 0, radius: 6 });
     }
 
     function spawnDiamond() {
+        // DRIFTING DIAMONDS
         diamonds.push({ 
             x: Math.random() * (width-40) + 20, 
             y: Math.random() * (height-40) + 20, 
+            vx: (Math.random() - 0.5) * 0.5, // Slow drift
+            vy: (Math.random() - 0.5) * 0.5,
             radius: 7.5 
         });
     }
@@ -376,11 +405,7 @@
         let r = Math.random();
         let type = 'SHIELD';
         
-        // RARITY ADJUSTMENT:
-        // 0.0 - 0.4 = SHIELD (40%)
-        // 0.4 - 0.8 = STAR (40%)
-        // 0.8 - 1.0 = HOLE (20%)
-        
+        // 20% Vortex, 40% Shield, 40% Star
         if (r < 0.4) type = 'SHIELD';
         else if (r < 0.8) type = 'STAR';
         else type = 'HOLE';
@@ -396,8 +421,7 @@
     function spawnBlackHole(x, y) {
         playSound('charge');
         blackHoles.push({
-            x: x,
-            y: y,
+            x: x, y: y,
             delay: CONFIG.blackHoleDelay, 
             life: CONFIG.blackHoleDuration, 
             angle: 0 
@@ -411,7 +435,34 @@
         return diff;
     }
 
+    function scorePoints(points) {
+        score += points * scoreMultiplier;
+        lastScoreTime = Date.now();
+        updateHUD();
+    }
+
+    function increaseMultiplier() {
+        scoreMultiplier++;
+        // Pulse animation
+        elCombo.classList.remove('pulse');
+        void elCombo.offsetWidth; // Trigger reflow
+        elCombo.classList.add('pulse');
+        lastScoreTime = Date.now();
+        updateHUD();
+    }
+
     function update() {
+        // --- MULTIPLIER LOGIC ---
+        let timeSinceScore = Date.now() - lastScoreTime;
+        if (timeSinceScore > CONFIG.multiplierResetTime && scoreMultiplier > 1) {
+            scoreMultiplier = 1;
+            updateHUD();
+        }
+        
+        // Update Bar
+        let pct = Math.max(0, 100 - (timeSinceScore / CONFIG.multiplierResetTime * 100));
+        elMultBar.style.width = pct + "%";
+        
         // --- PLAYER PHYSICS ---
         let diffX = getShortestAngleDiff(rawTiltBeta, baseTiltBeta); 
         let diffY = getShortestAngleDiff(rawTiltGamma, baseTiltGamma);
@@ -480,12 +531,10 @@
                 
                 if (dist < 20) { 
                     enemies.splice(j, 1);
-                    score += 10; 
+                    scorePoints(10); // Score with multiplier
                     playSound('suck');
                     createExplosion(bh.x, bh.y, '#8e44ad', 5);
                 } else {
-                    // STRONGER ATTRACTION FOR DOTS
-                    // Multiplier increased to 1500 (50% stronger)
                     let f = (CONFIG.blackHoleForce * 1500) / Math.max(distSq, 100);
                     e.x += (dx / dist) * f;
                     e.y += (dy / dist) * f;
@@ -500,7 +549,8 @@
                 let distSq = dx*dx + dy*dy;
                 if (distSq < 400) {
                     diamonds.splice(j, 1);
-                    score += combo; 
+                    scorePoints(1); // Base points
+                    increaseMultiplier(); // Black hole eating diamond boosts mult
                     playSound('suck');
                 } else {
                     let dist = Math.sqrt(distSq);
@@ -519,7 +569,7 @@
             player.vy += (pdy / pDist) * pf;
         }
 
-        // --- COLLISIONS ---
+        // --- COLLISIONS & MOVEMENT ---
         for (let i = enemies.length - 1; i >= 0; i--) {
             let e = enemies[i];
             
@@ -541,7 +591,7 @@
             if (pDist < (player.size + e.radius) * CONFIG.hitboxRatio) {
                 if (invincibilityTimer > 0) {
                     enemies.splice(i, 1);
-                    score += 10; 
+                    scorePoints(10);
                     createExplosion(e.x, e.y, '#f1c40f');
                     playSound('crash');
                 } else if (shieldActive) {
@@ -557,11 +607,17 @@
 
         for (let i = diamonds.length - 1; i >= 0; i--) {
             let d = diamonds[i];
+            
+            // Drifting Logic
+            d.x += d.vx;
+            d.y += d.vy;
+            if(d.x < 0 || d.x > width) d.vx *= -1;
+            if(d.y < 0 || d.y > height) d.vy *= -1;
+
             let dist = Math.hypot(player.x - d.x, player.y - d.y);
             if (dist < player.size + CONFIG.diamondHitbox) {
-                score += combo;
-                combo++;
-                updateHUD();
+                scorePoints(1); // Score base points
+                increaseMultiplier(); // Increase mult
                 playSound('coin');
                 diamonds.splice(i, 1);
             }
@@ -596,7 +652,7 @@
             let e = enemies[i];
             if (Math.hypot(player.x - e.x, player.y - e.y) < range) {
                 enemies.splice(i, 1);
-                score += 10; 
+                scorePoints(10);
                 createExplosion(e.x, e.y, '#e74c3c');
             }
         }
@@ -646,17 +702,12 @@
 
     function updateHUD() {
         elScore.innerText = "SCORE: " + score;
+        elCombo.innerText = scoreMultiplier + "x";
+        elMultContainer.style.display = 'block'; // Show bar
+        
         let hearts = "";
         for(let i=0; i<lives; i++) hearts += "❤";
         elLives.innerText = hearts;
-        
-        if(combo > 1) {
-            elCombo.style.display = 'block';
-            elCombo.style.opacity = 1;
-            elCombo.innerText = "x" + combo + " COMBO";
-        } else {
-            elCombo.style.display = 'none';
-        }
     }
 
     function draw() {
