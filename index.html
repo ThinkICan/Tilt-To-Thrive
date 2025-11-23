@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Tilt Survival: Vector Boost</title>
+    <title>Tilt to Thrive</title>
     <style>
         /* --- CORE STYLES --- */
         body { 
@@ -72,7 +72,7 @@
         button:active { transform: scale(0.95); }
         button.red { background: linear-gradient(to bottom, #e74c3c, #c0392b); box-shadow: 0 0 15px #c0392b; }
 
-        /* Slider */
+        /* Slider Styling */
         .slider-container { margin-bottom: 20px; pointer-events: auto; width: 200px; }
         input[type=range] { width: 100%; accent-color: #f1c40f; }
         .diff-label { color: #f1c40f; font-weight: bold; margin-top: 5px; display: block; font-family: sans-serif; }
@@ -114,6 +114,9 @@
         /* Multiplier Bar */
         #mult-bar-container { position: absolute; top: 40px; left: 15px; width: 100px; height: 6px; background: rgba(0,0,0,0.5); border: 1px solid #555; border-radius: 4px; display: none; }
         #mult-bar-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #f1c40f, #e67e22); border-radius: 3px; transition: width 0.1s linear; }
+        
+        /* Copyright Footer */
+        #copyright { position: absolute; bottom: 10px; width: 100%; text-align: center; color: #2ecc71; font-size: 10px; opacity: 0.6; font-family: sans-serif; }
     </style>
 </head>
 <body>
@@ -139,6 +142,7 @@
             <div class="logo-title">TILT TO<br>THRIVE</div>
             <div class="rotate-hint">⟳ Rotate Phone to Landscape</div>
             <p class="instruction-text" style="color: #bdc3c7">Tap anywhere to begin</p>
+            <div id="copyright">© 2025 Steve Elkins</div>
         </div>
 
         <div id="start-screen" class="screen-box">
@@ -175,12 +179,13 @@
 <script>
     // --- CONFIG ---
     const CONFIG = {
-        // PHYSICS:
-        friction: 0.96,         
-        acceleration: 0.01,     
-        inputExponent: 1.4,     
-        maxVelocity: 11.0,
-        turnBoost: 1.5,         // Multiplier for acceleration when turning (dot product)
+        // PHYSICS: Tuned for control without "gliding"
+        friction: 0.94,         // Higher drag (was 0.96) to reduce floatiness
+        acceleration: 0.008,    // Lower accel to compensate for max clamp
+        inputExponent: 1.4,     // Curve
+        maxVelocity: 9.0,       // Lower top speed (was 11.0)
+        maxTiltAngle: 35,       // Degrees. Full speed at 35deg tilt. No need to flip phone.
+        turnBoost: 1.5,         
         
         // Gameplay
         baseSpeed: 0.1, 
@@ -193,9 +198,13 @@
         
         // Powerups
         invincibilityTime: 8000,
+        
+        // Black Hole
         blackHoleDuration: 10000,
         blackHoleDelay: 2000,   
         blackHoleForce: 0.6,    
+        
+        // Fire Booster
         fireDuration: 400,      
         fireTrailLife: 5000,    
         fireRadius: 25,         
@@ -458,13 +467,13 @@
         
         if(spawnTimeout) clearTimeout(spawnTimeout);
 
-        if(difficultyLevel === 1) { // Easy
+        if(difficultyLevel === 1) { 
             CONFIG.baseSpeed = 0.05;
             CONFIG.spawnRate = 0.02;
-        } else if(difficultyLevel === 2) { // Normal
+        } else if(difficultyLevel === 2) { 
             CONFIG.baseSpeed = 0.1;
             CONFIG.spawnRate = 0.04;
-        } else { // Hard
+        } else { 
             CONFIG.baseSpeed = 0.15;
             CONFIG.spawnRate = 0.06;
         }
@@ -655,39 +664,34 @@
             let diffX = getShortestAngleDiff(rawTiltBeta, baseTiltBeta); 
             let diffY = getShortestAngleDiff(rawTiltGamma, baseTiltGamma);
 
-            // --- NEW: Dot Product Boost ---
-            // 1. Normalize velocity
+            // CLAMP Input: Anything > 35 degrees is treated as max tilt
+            if(diffX > CONFIG.maxTiltAngle) diffX = CONFIG.maxTiltAngle;
+            if(diffX < -CONFIG.maxTiltAngle) diffX = -CONFIG.maxTiltAngle;
+            if(diffY > CONFIG.maxTiltAngle) diffY = CONFIG.maxTiltAngle;
+            if(diffY < -CONFIG.maxTiltAngle) diffY = -CONFIG.maxTiltAngle;
+
+            let forceX = Math.sign(diffX) * Math.pow(Math.abs(diffX), CONFIG.inputExponent);
+            let forceY = Math.sign(diffY) * Math.pow(Math.abs(diffY), CONFIG.inputExponent);
+
+            // --- VECTOR BOOST (Dot Product) ---
             let speed = Math.sqrt(player.vx*player.vx + player.vy*player.vy);
             let vxNorm = (speed > 0.1) ? player.vx / speed : 0;
             let vyNorm = (speed > 0.1) ? player.vy / speed : 0;
 
-            // 2. Normalize input force
-            let forceMagX = Math.pow(Math.abs(diffX), CONFIG.inputExponent);
-            let forceMagY = Math.pow(Math.abs(diffY), CONFIG.inputExponent);
-            let forceSignX = Math.sign(diffX);
-            let forceSignY = Math.sign(diffY);
-            
-            // Calculate raw input vector (normalized roughly)
-            let totalForce = Math.sqrt(forceMagX*forceMagX + forceMagY*forceMagY);
-            let fxNorm = (totalForce > 0) ? (forceMagX * forceSignX) / totalForce : 0;
-            let fyNorm = (totalForce > 0) ? (forceMagY * forceSignY) / totalForce : 0;
+            let totalForce = Math.sqrt(forceX*forceX + forceY*forceY);
+            let fxNorm = (totalForce > 0) ? (forceX) / totalForce : 0;
+            let fyNorm = (totalForce > 0) ? (forceY) / totalForce : 0;
 
-            // 3. Dot Product (How parallel are we?)
-            // Since Y is inverted for gameplay, flip it for dot calculation to match screen space
-            // player.vy is Screen Y. forceY is Input Y.
-            // Actually, simpler: 
-            // Input X aligns with player Vx. Input Y (negative) aligns with player Vy.
+            // Dot Product (Input vs Velocity)
+            // Note: Y is inverted in game logic (-=), so we flip sign for math calc
             let dot = (vxNorm * (fxNorm * orientationSign)) + (vyNorm * (-fyNorm * orientationSign));
             
-            // 4. Turn Boost Logic
-            // dot = 1 (Parallel), dot = 0 (Perpendicular), dot = -1 (Opposite)
-            // We want boost when dot is near 0.
-            let turnFactor = 1 - Math.abs(dot); // 1.0 at 90 degrees
+            // Turn Factor (1.0 = 90deg turn)
+            let turnFactor = 1 - Math.abs(dot); 
             let dynamicAccel = CONFIG.acceleration * (1 + (turnFactor * CONFIG.turnBoost));
 
-            // Apply Forces
-            player.vx += forceMagX * forceSignX * dynamicAccel * orientationSign; 
-            player.vy -= forceMagY * forceSignY * dynamicAccel * orientationSign; 
+            player.vx += forceX * dynamicAccel * orientationSign; 
+            player.vy -= forceY * dynamicAccel * orientationSign; 
 
             player.vx *= CONFIG.friction;
             player.vy *= CONFIG.friction;
@@ -758,7 +762,8 @@
                 if (Math.sqrt(distSq) < 20) { 
                     enemies.splice(j, 1); scorePoints(10); playSound('suck'); createExplosion(bh.x, bh.y, '#8e44ad', 5);
                 } else {
-                    let f = (CONFIG.blackHoleForce * 1500) / Math.max(distSq, 100);
+                    // Doubled force (4.0 multiplier total effect)
+                    let f = (CONFIG.blackHoleForce * 4000) / Math.max(distSq, 100);
                     e.x += (dx / Math.sqrt(distSq)) * f;
                     e.y += (dy / Math.sqrt(distSq)) * f;
                 }
@@ -782,7 +787,8 @@
             let pdy = bh.y - player.y;
             let pDistSq = pdx*pdx + pdy*pdy;
             let pDist = Math.sqrt(pDistSq);
-            let pf = (CONFIG.blackHoleForce * 300) / Math.max(pDistSq, 100); 
+            // Weakened pull on player (0.8 multiplier)
+            let pf = (CONFIG.blackHoleForce * 0.8 * 300) / Math.max(pDistSq, 100); 
             player.vx += (pdx / pDist) * pf;
             player.vy += (pdy / pDist) * pf;
         }
@@ -960,6 +966,7 @@
         fireTrails.forEach(f => {
             let alpha = f.life / CONFIG.fireTrailLife;
             
+            // Color Shift: Orange -> Yellow -> Smoke Gray
             if (alpha > 0.6) ctx.fillStyle = `rgba(230, 126, 34, ${alpha})`;
             else if (alpha > 0.3) ctx.fillStyle = `rgba(241, 196, 15, ${alpha})`;
             else ctx.fillStyle = `rgba(128, 128, 128, ${alpha})`;
@@ -1015,9 +1022,6 @@
             ctx.lineTo(d.x, d.y + d.radius);
             ctx.lineTo(d.x - d.radius, d.y);
             ctx.fill();
-            
-            ctx.strokeStyle = 'white'; ctx.lineWidth = 1.5; ctx.stroke();
-            
             if(Math.random() < 0.05) {
                 ctx.fillStyle = 'white';
                 ctx.fillRect(d.x - 2, d.y - 2, 4, 4);
@@ -1058,6 +1062,7 @@
             ctx.globalAlpha = 1.0;
         });
 
+        // DRAW PLAYER
         if (state === 'PLAYING' || state === 'COUNTDOWN') {
             ctx.save();
             ctx.translate(player.x, player.y);
@@ -1067,12 +1072,13 @@
                 ctx.beginPath(); ctx.arc(0,0, 20, 0, Math.PI*2); ctx.stroke();
             }
             if (invincibilityTimer > 0) {
+                 // DRAW GEAR
                  ctx.save();
-                 ctx.rotate(Date.now()/200); 
+                 ctx.rotate(Date.now()/200); // Independent Spin
                  ctx.beginPath();
                  const spikes = 8;
-                 const outer = 26; 
-                 const inner = 17;
+                 const outer = 22;
+                 const inner = 14;
                  for(let i=0; i<spikes*2; i++) {
                      const r = (i%2===0) ? outer : inner;
                      const a = (Math.PI * i / spikes);
@@ -1085,6 +1091,7 @@
                  ctx.restore();
             }
 
+            // Draw Ship Body
             ctx.rotate(player.angle);
             ctx.fillStyle = (invincibilityTimer > 0) ? '#f1c40f' : '#ecf0f1';
             ctx.beginPath();
