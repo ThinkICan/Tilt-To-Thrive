@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Tilt Survival: Deluxe</title>
+    <title>Tilt Survival: Balanced</title>
     <style>
         /* Radioactive Green Background Base */
         body { margin: 0; overflow: hidden; background: #051e11; font-family: -apple-system, BlinkMacSystemFont, sans-serif; touch-action: none; user-select: none; -webkit-user-select: none; }
@@ -12,7 +12,6 @@
         
         h1 { font-size: 40px; margin: 0 0 10px 0; color: #ecf0f1; text-shadow: 2px 2px 0px #000; }
         h2 { font-size: 80px; color: #f1c40f; margin: 0; text-shadow: 4px 4px 0px #000; display: none; }
-        /* Brighter neon text */
         p { font-size: 16px; color: #7fff00; margin-bottom: 20px; text-shadow: 0 0 5px rgba(127, 255, 0, 0.5); }
         
         #hud-top { position: absolute; top: 10px; left: 15px; right: 15px; display: flex; justify-content: space-between; pointer-events: none; }
@@ -103,7 +102,8 @@
         spawnRate: 0.05,
         
         hitboxRatio: 0.55,
-        diamondHitbox: 12,      
+        diamondHitbox: 12,
+        shieldRadius: 20,       // Size of collision when shield is active
         invincibilityTime: 5000,
         blackHoleDuration: 10000,
         blackHoleDelay: 2000,   
@@ -206,10 +206,9 @@
     const elMultBar = document.getElementById('mult-bar-fill');
     const elMultContainer = document.getElementById('mult-bar-container');
     
-    // Difficulty Controls
     const slider = document.getElementById('diff-slider');
     const diffVal = document.getElementById('diff-val');
-    let difficultyLevel = 2; // 1=Easy, 2=Normal, 3=Hard
+    let difficultyLevel = 2; 
 
     let state = 'MENU'; 
     let width, height;
@@ -217,7 +216,6 @@
     let score = 0;
     let orientationSign = 1;
 
-    // SCORING STATE
     let scoreMultiplier = 1;
     let lastScoreTime = 0;
 
@@ -263,7 +261,6 @@
     window.addEventListener('orientationchange', () => { setTimeout(resize, 200); });
     resize();
 
-    // Background Init
     for(let i=0; i<30; i++) {
         bgParticles.push({
             x: Math.random() * window.innerWidth,
@@ -275,8 +272,6 @@
     }
 
     // --- INPUTS ---
-    
-    // Slider Logic
     slider.addEventListener('input', (e) => {
         difficultyLevel = parseInt(e.target.value);
         if(difficultyLevel === 1) diffVal.innerText = "EASY";
@@ -301,7 +296,6 @@
         resumeGame();
     });
 
-    // Tap to Pause
     window.addEventListener('click', (e) => {
         if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return;
         if (state === 'PLAYING') {
@@ -345,6 +339,7 @@
         uiCountdown.style.display = 'block';
         
         // Configure Difficulty
+        // Using VERY SLOW base speeds
         if(difficultyLevel === 1) { // Easy
             CONFIG.baseSpeed = 0.05;
             CONFIG.spawnRate = 0.03;
@@ -405,7 +400,11 @@
 
     function spawnManager() {
         if (state !== 'PLAYING') return;
-        if (Math.random() < CONFIG.spawnRate + (score * 0.0001)) spawnEnemy();
+        
+        // SLOWED SPAWN RAMP (Divided impact of score by 5)
+        let ramp = score * 0.00002; 
+        
+        if (Math.random() < CONFIG.spawnRate + ramp) spawnEnemy();
         if (Math.random() < 0.06) spawnDiamond(); 
         if (Math.random() < 0.016) spawnPowerup(); 
         setTimeout(spawnManager, 100); 
@@ -419,25 +418,23 @@
         else if(edge === 2) { ex = Math.random() * width; ey = height + 20; }
         else { ex = -20; ey = Math.random() * height; }
         
-        // --- SPEED FORMULA BASED ON DIFFICULTY ---
+        // --- SLOWED DIFFICULTY RAMP ---
         let speed = CONFIG.baseSpeed;
         
         if (difficultyLevel === 1) {
-            // EASY: Log Base 10 (Very slow growth)
-            speed += Math.log10(score + 10) * 0.5;
+            // EASY: Log10 with large offset (Very slow)
+            speed += Math.log10(score + 500) * 0.2; 
         } else {
-            // NORMAL/HARD: Natural Log (Faster growth)
-            speed += Math.log(score + 10) * 0.5;
+            // NORMAL/HARD: Log with large offset
+            speed += Math.log(score + 500) * 0.2;
         }
         
-        // Cap max speed
         speed = Math.min(8.0, speed);
         
         enemies.push({ x: ex, y: ey, speed: speed, vx: 0, vy: 0, radius: 6 });
     }
 
     function spawnDiamond() {
-        // DRIFTING DIAMONDS
         diamonds.push({ 
             x: Math.random() * (width-40) + 20, 
             y: Math.random() * (height-40) + 20, 
@@ -450,7 +447,6 @@
     function spawnPowerup() {
         let r = Math.random();
         let type = 'SHIELD';
-        
         if (r < 0.4) type = 'SHIELD';
         else if (r < 0.8) type = 'STAR';
         else type = 'HOLE';
@@ -489,25 +485,23 @@
     function increaseMultiplier() {
         scoreMultiplier++;
         elCombo.classList.remove('pulse');
-        void elCombo.offsetWidth; // Trigger reflow
+        void elCombo.offsetWidth; 
         elCombo.classList.add('pulse');
         lastScoreTime = Date.now();
         updateHUD();
     }
 
     function update() {
-        // --- MULTIPLIER LOGIC ---
         let timeSinceScore = Date.now() - lastScoreTime;
         if (timeSinceScore > CONFIG.multiplierResetTime && scoreMultiplier > 1) {
             scoreMultiplier = 1;
             updateHUD();
         }
         
-        // Update Bar
         let pct = Math.max(0, 100 - (timeSinceScore / CONFIG.multiplierResetTime * 100));
         elMultBar.style.width = pct + "%";
         
-        // --- PLAYER PHYSICS ---
+        // Physics
         let diffX = getShortestAngleDiff(rawTiltBeta, baseTiltBeta); 
         let diffY = getShortestAngleDiff(rawTiltGamma, baseTiltGamma);
 
@@ -548,7 +542,7 @@
             }
         }
 
-        // --- BLACK HOLE PHYSICS ---
+        // Black Holes
         for (let i = blackHoles.length - 1; i >= 0; i--) {
             let bh = blackHoles[i];
             
@@ -565,7 +559,6 @@
                 continue;
             }
 
-            // Attract Enemies
             for (let j = enemies.length - 1; j >= 0; j--) {
                 let e = enemies[j];
                 let dx = bh.x - e.x;
@@ -585,7 +578,6 @@
                 }
             }
 
-            // Attract Diamonds
             for (let j = diamonds.length - 1; j >= 0; j--) {
                 let d = diamonds[j];
                 let dx = bh.x - d.x;
@@ -593,7 +585,7 @@
                 let distSq = dx*dx + dy*dy;
                 if (distSq < 400) {
                     diamonds.splice(j, 1);
-                    scorePoints(1); // Base points
+                    scorePoints(1); 
                     increaseMultiplier(); 
                     playSound('suck');
                 } else {
@@ -603,7 +595,7 @@
                     d.y += (dy / dist) * f;
                 }
             }
-            // Attract Player
+            
             let pdx = bh.x - player.x;
             let pdy = bh.y - player.y;
             let pDistSq = pdx*pdx + pdy*pdy;
@@ -613,7 +605,7 @@
             player.vy += (pdy / pDist) * pf;
         }
 
-        // --- COLLISIONS & MOVEMENT ---
+        // Collisions
         for (let i = enemies.length - 1; i >= 0; i--) {
             let e = enemies[i];
             
@@ -630,9 +622,13 @@
             e.x += e.vx;
             e.y += e.vy;
             
+            // HITBOX CHECK
+            // Use Larger Radius if Shield is Active
+            let hitDist = (shieldActive) ? CONFIG.shieldRadius : (player.size * CONFIG.hitboxRatio);
+
             let pDist = Math.hypot(player.x - e.x, player.y - e.y);
 
-            if (pDist < (player.size + e.radius) * CONFIG.hitboxRatio) {
+            if (pDist < hitDist + e.radius) {
                 if (invincibilityTimer > 0) {
                     enemies.splice(i, 1);
                     scorePoints(10); 
@@ -753,7 +749,6 @@
     }
 
     function draw() {
-        // --- BACKGROUND ---
         let grd = ctx.createRadialGradient(width/2, height/2, 0, width/2, height/2, width);
         grd.addColorStop(0, '#145a14'); 
         grd.addColorStop(1, '#051e11'); 
@@ -771,7 +766,6 @@
         for (let y = offsetY; y < height; y += gridSize) { ctx.moveTo(0, y); ctx.lineTo(width, y); }
         ctx.stroke();
 
-        // Reduced BG Visibility
         ctx.fillStyle = 'rgba(127, 255, 0, 0.1)';
         bgParticles.forEach(p => {
             ctx.beginPath();
@@ -784,7 +778,6 @@
             }
         });
 
-        // --- BLACK HOLES ---
         blackHoles.forEach(bh => {
             if (bh.delay > 0) {
                 let progress = 1 - (bh.delay / CONFIG.blackHoleDelay);
@@ -818,8 +811,6 @@
             }
         });
 
-        // --- ITEMS ---
-        // Diamonds with sparkle
         diamonds.forEach(d => {
             ctx.fillStyle = '#f1c40f';
             ctx.beginPath();
@@ -828,8 +819,6 @@
             ctx.lineTo(d.x, d.y + d.radius);
             ctx.lineTo(d.x - d.radius, d.y);
             ctx.fill();
-            
-            // Random Sparkle
             if(Math.random() < 0.05) {
                 ctx.fillStyle = 'white';
                 ctx.fillRect(d.x - 2, d.y - 2, 4, 4);
@@ -855,7 +844,7 @@
             }
         });
 
-        // --- ENEMIES (With Outline) ---
+        // Red Dots with Outline
         enemies.forEach(e => {
             ctx.fillStyle = '#e74c3c';
             ctx.beginPath();
@@ -882,7 +871,7 @@
             
             if (shieldActive) {
                 ctx.strokeStyle = '#3498db'; ctx.lineWidth = 3;
-                ctx.beginPath(); ctx.arc(0,0, 18, 0, Math.PI*2); ctx.stroke();
+                ctx.beginPath(); ctx.arc(0,0, 20, 0, Math.PI*2); ctx.stroke(); // 20 radius visual
             }
             if (invincibilityTimer > 0) {
                  if (Math.floor(Date.now() / 50) % 2 === 0) ctx.fillStyle = '#f1c40f';
