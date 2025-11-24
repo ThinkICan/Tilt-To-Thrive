@@ -72,7 +72,7 @@
         button:active { transform: scale(0.95); }
         button.red { background: linear-gradient(to bottom, #e74c3c, #c0392b); box-shadow: 0 0 15px #c0392b; }
 
-        /* Slider Styling */
+        /* Slider */
         .slider-container { margin-bottom: 20px; pointer-events: auto; width: 200px; }
         input[type=range] { width: 100%; accent-color: #f1c40f; }
         .diff-label { color: #f1c40f; font-weight: bold; margin-top: 5px; display: block; font-family: sans-serif; }
@@ -90,40 +90,60 @@
 
         #splash-screen, #start-screen, #game-over, #pause-screen { display: none; }
         
-        /* Splash Logo */
+        /* --- SPLASH ART STYLING --- */
+        /* CSS recreation of the provided Cosmic theme */
+        #splash-screen {
+            background: radial-gradient(circle at center, #2b1055, #000000);
+            border: 2px solid #8e44ad;
+            box-shadow: 0 0 50px rgba(142, 68, 173, 0.5);
+            width: 80%;
+            max-width: 500px;
+        }
+
         .logo-title {
             font-family: sans-serif;
-            font-size: 50px;
+            font-size: 55px;
             font-weight: 900;
-            font-style: italic;
-            background: -webkit-linear-gradient(#f1c40f, #e67e22);
+            text-transform: uppercase;
+            background: linear-gradient(to right, #00c6ff, #0072ff);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            margin-bottom: 10px;
-            filter: drop-shadow(0px 0px 10px rgba(241, 196, 15, 0.5));
+            filter: drop-shadow(0px 0px 5px rgba(0, 198, 255, 0.8));
+            margin-bottom: 20px;
+            line-height: 1.1;
         }
         
-        .instruction-text { font-size: 16px; color: #7fff00; margin-bottom: 20px; line-height: 1.5; font-family: sans-serif; }
-        .rotate-hint { color: #3498db; font-weight: bold; margin-bottom: 20px; font-size: 18px; animation: pulse 2s infinite; }
+        .instruction-text { font-size: 16px; color: #fff; margin-bottom: 20px; line-height: 1.5; font-family: sans-serif; }
+        
+        .rotate-hint { 
+            color: #fff; 
+            font-weight: bold; 
+            margin-bottom: 20px; 
+            font-size: 22px; 
+            font-family: sans-serif;
+            text-shadow: 0 0 10px #00c6ff;
+            animation: pulse 2s infinite; 
+        }
 
-        @keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
+        @keyframes pulse { 0% { opacity: 0.7; transform: scale(1); } 50% { opacity: 1; transform: scale(1.05); } 100% { opacity: 0.7; transform: scale(1); } }
 
         /* Rotation Warning Overlay */
-        #rotate-msg { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #051e11; z-index: 999; flex-direction: column; justify-content: center; align-items: center; color: white; font-family: sans-serif;}
+        #rotate-msg { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 999; flex-direction: column; justify-content: center; align-items: center; color: white; font-family: sans-serif;}
 
         /* Multiplier Bar */
         #mult-bar-container { position: absolute; top: 40px; left: 15px; width: 100px; height: 6px; background: rgba(0,0,0,0.5); border: 1px solid #555; border-radius: 4px; display: none; }
         #mult-bar-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #f1c40f, #e67e22); border-radius: 3px; transition: width 0.1s linear; }
         
         /* Copyright Footer */
-        #copyright { position: absolute; bottom: 10px; width: 100%; text-align: center; color: #2ecc71; font-size: 10px; opacity: 0.6; font-family: sans-serif; }
+        #copyright { position: absolute; bottom: 10px; width: 100%; text-align: center; color: rgba(255,255,255,0.3); font-size: 10px; font-family: sans-serif; }
     </style>
 </head>
 <body>
 
     <div id="rotate-msg">
-        <div style="font-size: 50px;">↻</div>
-        <p style="color:white">Please rotate to Landscape</p>
+        <div class="logo-title" style="font-size: 40px;">Tilt to Thrive</div>
+        <div style="font-size: 50px; color:#00c6ff; margin: 20px;">⟳</div>
+        <p style="color:white; font-size: 24px; font-weight:bold;">Rotate to Landscape</p>
     </div>
 
     <div id="hud-top">
@@ -138,10 +158,13 @@
     <div id="ui-layer">
         <h2 id="countdown-text" style="font-size: 100px; color: #fff; text-shadow: 0 0 20px #f1c40f; display:none;">3</h2>
 
-        <div id="splash-screen" class="screen-box" style="display:flex; flex-direction:column; align-items:center;">
+        <div id="splash-screen" style="display:flex; flex-direction:column; align-items:center;">
+            <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #1a1a2e, #16213e); border-radius: 20px; display: flex; justify-content: center; align-items: center; border: 2px solid #00c6ff; box-shadow: 0 0 20px #00c6ff; margin-bottom: 10px;">
+                <div style="width: 0; height: 0; border-left: 20px solid transparent; border-right: 20px solid transparent; border-bottom: 40px solid #00c6ff;"></div>
+            </div>
             <div class="logo-title">TILT TO<br>THRIVE</div>
-            <div class="rotate-hint">⟳ Rotate Phone to Landscape</div>
-            <p class="instruction-text" style="color: #bdc3c7">Tap anywhere to begin</p>
+            <div class="rotate-hint">Rotate to Landscape Mode</div>
+            <p class="instruction-text" style="color: #bdc3c7; font-size: 14px;">Tap anywhere to begin</p>
             <div id="copyright">© 2025 Steve Elkins</div>
         </div>
 
@@ -179,24 +202,27 @@
 <script>
     // --- CONFIG ---
     const CONFIG = {
-        // PHYSICS: Tuned for control without "gliding"
-        friction: 0.94,         // Higher drag (was 0.96) to reduce floatiness
-        acceleration: 0.008,    // Lower accel to compensate for max clamp
-        inputExponent: 1.4,     // Curve
-        maxVelocity: 9.0,       // Lower top speed (was 11.0)
-        maxTiltAngle: 35,       // Degrees. Full speed at 35deg tilt. No need to flip phone.
+        // PHYSICS
+        friction: 0.96,         
+        acceleration: 0.01,     
+        inputExponent: 1.4,     
+        maxVelocity: 11.0,
+        maxTiltAngle: 35,
         turnBoost: 1.5,         
         
         // Gameplay
         baseSpeed: 0.1, 
         spawnRate: 0.05,
+        waveDuration: 60000,    // 60 Seconds for wave reset
         
-        // Hitboxes
-        hitboxRatio: 0.55,
-        diamondHitbox: 15,      
+        // Hitboxes & Magnetism
+        hitboxRatio: 0.55,      // Standard Hitbox
+        enemyHitboxRatio: 0.45, // Smaller hitbox for enemies (Near Miss feel)
+        diamondHitbox: 15,
+        magnetRadius: 150,      // Range to pull items
+        magnetForce: 0.5,       // Strength of pull
+        
         shieldRadius: 24,       
-        
-        // Powerups
         invincibilityTime: 8000,
         
         // Black Hole
@@ -212,10 +238,23 @@
         multiplierResetTime: 15000 
     };
 
-    // --- AUDIO ENGINE ---
+    // --- MUSIC ENGINE (Procedural) ---
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    
+    // Sound FX
     let starOsc = null; 
     let starGain = null;
+
+    // Soundtrack State
+    let isMusicPlaying = false;
+    let musicStartTime = 0;
+    let schedulerTimer;
+    const MUSIC_TOTAL_DURATION = 300; 
+    const C = 261.63, D = 293.66, E = 329.63, F = 349.23, G = 392.00, A = 440.00, B = 493.88;
+    const CHORD_PROGRESSION = [
+        [C, E, G], [G, B, D*2], [A, C*2, E*2], [F, A, C*2]
+    ];
+    let seqState = { chordIndex: 0, noteIndex: 0, beatCounter: 0 };
 
     function unlockAudio() {
         if (audioCtx.state === 'suspended') { audioCtx.resume(); }
@@ -226,13 +265,72 @@
         source.start(0); 
     }
 
+    function startSoundtrack() {
+        if(isMusicPlaying) return;
+        isMusicPlaying = true;
+        // Start at 30% progress (Skip Largo, jump to Moderato)
+        musicStartTime = audioCtx.currentTime - (MUSIC_TOTAL_DURATION * 0.3); 
+        scheduleNextBeat();
+    }
+
+    function playEnvelopeNote(frequency, duration, type, attack, release) {
+        const now = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        
+        osc.type = type;
+        osc.frequency.setValueAtTime(frequency, now);
+        
+        gainNode.gain.setValueAtTime(0, now);
+        gainNode.gain.linearRampToValueAtTime(0.15, now + attack); // Low volume for bg music
+        gainNode.gain.setValueAtTime(0.15, now + duration - release);
+        gainNode.gain.linearRampToValueAtTime(0, now + duration);
+        
+        osc.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        osc.start(now);
+        osc.stop(now + duration + 0.1); 
+    }
+
+    function scheduleNextBeat() {
+        if(!isMusicPlaying) return;
+        const elapsed = audioCtx.currentTime - musicStartTime;
+        const progress = Math.min(elapsed / MUSIC_TOTAL_DURATION, 1.0);
+        
+        // Map progress to BPM (60 to 320)
+        const currentBPM = 60 + (progress * (320 - 60));
+        const secondsPerBeat = 60.0 / currentBPM;
+
+        // Logic derived from your snippet
+        if (progress < 0.7) {
+            // Moderato
+            let baseFreq = CHORD_PROGRESSION[seqState.chordIndex][seqState.noteIndex];
+            playEnvelopeNote(baseFreq, secondsPerBeat * 0.8, 'triangle', 0.05, 0.1);
+            seqState.noteIndex = (seqState.noteIndex + 1) % 3;
+        } else {
+            // Presto
+            let octave = (seqState.beatCounter % 2 === 0) ? 1 : 2; 
+            if (Math.random() > 0.8) octave = 3;
+            let baseFreq = CHORD_PROGRESSION[seqState.chordIndex][seqState.noteIndex];
+            playEnvelopeNote(baseFreq * octave, secondsPerBeat * 0.3, 'triangle', 0.01, 0.05);
+            seqState.noteIndex = (seqState.noteIndex + 1) % 3;
+        }
+
+        seqState.beatCounter++;
+        if (seqState.beatCounter % 4 === 0) {
+            seqState.chordIndex = (seqState.chordIndex + 1) % CHORD_PROGRESSION.length;
+            if (progress < 0.7) seqState.noteIndex = 0; 
+        }
+
+        schedulerTimer = setTimeout(scheduleNextBeat, secondsPerBeat * 1000);
+    }
+
     function playSound(type) {
-        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const now = audioCtx.currentTime;
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
         osc.connect(gain);
         gain.connect(audioCtx.destination);
-        const now = audioCtx.currentTime;
 
         if (type === 'beep') { 
             osc.type = 'square'; osc.frequency.setValueAtTime(440, now); osc.frequency.exponentialRampToValueAtTime(0.01, now + 0.1);
@@ -323,6 +421,7 @@
 
     let scoreMultiplier = 1;
     let lastScoreTime = 0;
+    let lastWaveTime = 0; // For wave resets
 
     let rawTiltBeta = 0, rawTiltGamma = 0; 
     let baseTiltBeta = 0, baseTiltGamma = 0; 
@@ -433,6 +532,8 @@
         uiPause.style.display = 'block';
         if(starOsc) starOsc.disconnect();
         if(spawnTimeout) clearTimeout(spawnTimeout);
+        if(schedulerTimer) clearTimeout(schedulerTimer); // Pause Music
+        isMusicPlaying = false;
     }
 
     function resumeGame() {
@@ -440,6 +541,9 @@
         uiPause.style.display = 'none';
         if(invincibilityTimer > 0 && starOsc) starOsc.connect(starGain);
         spawnManager(); 
+        // Resume Music
+        isMusicPlaying = true;
+        scheduleNextBeat();
     }
 
     async function initPermsAndStart() {
@@ -467,13 +571,14 @@
         
         if(spawnTimeout) clearTimeout(spawnTimeout);
 
-        if(difficultyLevel === 1) { 
+        // Configure Difficulty
+        if(difficultyLevel === 1) { // Easy
             CONFIG.baseSpeed = 0.05;
             CONFIG.spawnRate = 0.02;
-        } else if(difficultyLevel === 2) { 
+        } else if(difficultyLevel === 2) { // Normal
             CONFIG.baseSpeed = 0.1;
             CONFIG.spawnRate = 0.04;
-        } else { 
+        } else { // Hard
             CONFIG.baseSpeed = 0.15;
             CONFIG.spawnRate = 0.06;
         }
@@ -487,9 +592,11 @@
         if(lives <= 0 || state === 'MENU') {
             lives = 3; score = 0; 
             scoreMultiplier = 1; 
+            startSoundtrack(); // Start Music
         }
         
         lastScoreTime = Date.now();
+        lastWaveTime = Date.now();
         
         player.x = width/2; player.y = height/2;
         player.vx = 0; player.vy = 0;
@@ -529,9 +636,23 @@
     function spawnManager() {
         if (state !== 'PLAYING') return;
         
-        let ramp = score * 0.00001; 
+        // --- WAVE SYSTEM ---
+        // Reset difficulty ramp every 60 seconds
+        let waveTime = Date.now() - lastWaveTime;
+        if (waveTime > CONFIG.waveDuration) {
+            lastWaveTime = Date.now(); // Reset Timer
+            // We don't reset score, but we reset the impact of score on spawn rate
+            // This creates the "Wave" effect
+        }
         
+        // Calculate ramp based on time within current wave, not total score
+        let waveProgress = waveTime / 1000; // Seconds in current wave
+        let ramp = waveProgress * 0.0005; 
+        
+        // Spawn Enemy
         if (Math.random() < CONFIG.spawnRate + ramp) spawnEnemy();
+        
+        // Spawn Loot
         if (Math.random() < 0.06) spawnDiamond(); 
         if (Math.random() < 0.016) spawnPowerup(); 
         
@@ -539,17 +660,27 @@
     }
 
     function spawnEnemy() {
-        let ex, ey;
-        let edge = Math.floor(Math.random() * 4); 
-        if(edge === 0) { ex = Math.random() * width; ey = -20; }
-        else if(edge === 1) { ex = width + 20; ey = Math.random() * height; }
-        else if(edge === 2) { ex = Math.random() * width; ey = height + 20; }
-        else { ex = -20; ey = Math.random() * height; }
+        // Safe Spawn Logic
+        let ex, ey, dist;
+        let safe = false;
+        let attempts = 0;
+        
+        while(!safe && attempts < 10) {
+            let edge = Math.floor(Math.random() * 4); 
+            if(edge === 0) { ex = Math.random() * width; ey = -20; }
+            else if(edge === 1) { ex = width + 20; ey = Math.random() * height; }
+            else if(edge === 2) { ex = Math.random() * width; ey = height + 20; }
+            else { ex = -20; ey = Math.random() * height; }
+            
+            // Check distance to player
+            dist = Math.hypot(player.x - ex, player.y - ey);
+            if (dist > 300) safe = true; // 300px Safe Zone
+            attempts++;
+        }
         
         let speed = CONFIG.baseSpeed;
         if (difficultyLevel === 1) speed += Math.log10(score + 2000) * 0.2; 
         else speed += Math.log(score + 2000) * 0.2;
-        
         speed = Math.min(8.0, speed);
         
         enemies.push({ x: ex, y: ey, speed: speed, vx: 0, vy: 0, radius: 6 });
@@ -568,7 +699,6 @@
     function spawnPowerup() {
         let r = Math.random();
         let type = 'SHIELD';
-        
         if (r < 0.35) type = 'SHIELD';
         else if (r < 0.7) type = 'STAR';
         else if (r < 0.9) type = 'HOLE';
@@ -634,7 +764,6 @@
         // --- PLAYER PHYSICS ---
         if (boostTimer > 0) {
             let phase = CONFIG.fireDuration - boostTimer;
-            
             if (phase < 100) {
                 player.vx = Math.cos(player.angle) * CONFIG.maxVelocity;
                 player.vy = Math.sin(player.angle) * CONFIG.maxVelocity;
@@ -658,13 +787,11 @@
                     vy: (Math.random()-0.5)*0.5
                 });
             }
-            
             boostTimer -= 16;
         } else {
             let diffX = getShortestAngleDiff(rawTiltBeta, baseTiltBeta); 
             let diffY = getShortestAngleDiff(rawTiltGamma, baseTiltGamma);
 
-            // CLAMP Input: Anything > 35 degrees is treated as max tilt
             if(diffX > CONFIG.maxTiltAngle) diffX = CONFIG.maxTiltAngle;
             if(diffX < -CONFIG.maxTiltAngle) diffX = -CONFIG.maxTiltAngle;
             if(diffY > CONFIG.maxTiltAngle) diffY = CONFIG.maxTiltAngle;
@@ -673,20 +800,14 @@
             let forceX = Math.sign(diffX) * Math.pow(Math.abs(diffX), CONFIG.inputExponent);
             let forceY = Math.sign(diffY) * Math.pow(Math.abs(diffY), CONFIG.inputExponent);
 
-            // --- VECTOR BOOST (Dot Product) ---
+            // Dot Boost
             let speed = Math.sqrt(player.vx*player.vx + player.vy*player.vy);
             let vxNorm = (speed > 0.1) ? player.vx / speed : 0;
             let vyNorm = (speed > 0.1) ? player.vy / speed : 0;
-
             let totalForce = Math.sqrt(forceX*forceX + forceY*forceY);
             let fxNorm = (totalForce > 0) ? (forceX) / totalForce : 0;
             let fyNorm = (totalForce > 0) ? (forceY) / totalForce : 0;
-
-            // Dot Product (Input vs Velocity)
-            // Note: Y is inverted in game logic (-=), so we flip sign for math calc
             let dot = (vxNorm * (fxNorm * orientationSign)) + (vyNorm * (-fyNorm * orientationSign));
-            
-            // Turn Factor (1.0 = 90deg turn)
             let turnFactor = 1 - Math.abs(dot); 
             let dynamicAccel = CONFIG.acceleration * (1 + (turnFactor * CONFIG.turnBoost));
 
@@ -724,24 +845,29 @@
             }
         }
 
+        // --- MAGNETISM ---
+        // Pull items towards player if close
+        const checkMagnet = (item) => {
+            let dx = player.x - item.x;
+            let dy = player.y - item.y;
+            let distSq = dx*dx + dy*dy;
+            if (distSq < CONFIG.magnetRadius * CONFIG.magnetRadius) {
+                let dist = Math.sqrt(distSq);
+                item.x += (dx / dist) * CONFIG.magnetForce * 5; // 5x speed multiplier for snapiness
+                item.y += (dy / dist) * CONFIG.magnetForce * 5;
+            }
+        };
+
         // --- FIRE TRAILS ---
         for (let i = fireTrails.length - 1; i >= 0; i--) {
             let f = fireTrails[i];
             f.life -= 16;
-            f.x += f.vx; 
-            f.y += f.vy;
-            
-            if (f.life <= 0) {
-                fireTrails.splice(i, 1);
-                continue;
-            }
-            
+            f.x += f.vx; f.y += f.vy;
+            if (f.life <= 0) { fireTrails.splice(i, 1); continue; }
             for (let j = enemies.length - 1; j >= 0; j--) {
                 let e = enemies[j];
                 if (Math.hypot(f.x - e.x, f.y - e.y) < (f.size * 0.8) + e.radius) {
-                    enemies.splice(j, 1);
-                    scorePoints(10);
-                    createExplosion(e.x, e.y, '#e67e22');
+                    enemies.splice(j, 1); scorePoints(10); createExplosion(e.x, e.y, '#e67e22');
                 }
             }
         }
@@ -762,8 +888,8 @@
                 if (Math.sqrt(distSq) < 20) { 
                     enemies.splice(j, 1); scorePoints(10); playSound('suck'); createExplosion(bh.x, bh.y, '#8e44ad', 5);
                 } else {
-                    // Doubled force (4.0 multiplier total effect)
-                    let f = (CONFIG.blackHoleForce * 4000) / Math.max(distSq, 100);
+                    // Doubled force for enemies
+                    let f = (CONFIG.blackHoleForce * 2.0 * 1500) / Math.max(distSq, 100);
                     e.x += (dx / Math.sqrt(distSq)) * f;
                     e.y += (dy / Math.sqrt(distSq)) * f;
                 }
@@ -787,8 +913,8 @@
             let pdy = bh.y - player.y;
             let pDistSq = pdx*pdx + pdy*pdy;
             let pDist = Math.sqrt(pDistSq);
-            // Weakened pull on player (0.8 multiplier)
-            let pf = (CONFIG.blackHoleForce * 0.8 * 300) / Math.max(pDistSq, 100); 
+            // Weakened pull on player (0.9 multiplier)
+            let pf = (CONFIG.blackHoleForce * 0.9 * 300) / Math.max(pDistSq, 100); 
             player.vx += (pdx / pDist) * pf;
             player.vy += (pdy / pDist) * pf;
         }
@@ -810,10 +936,12 @@
             e.x += e.vx;
             e.y += e.vy;
             
+            // Use Expanded Shield Radius if active
             let hitDist = (shieldActive || invincibilityTimer > 0) ? CONFIG.shieldRadius : (player.size * CONFIG.hitboxRatio);
             let pDist = Math.hypot(player.x - e.x, player.y - e.y);
 
-            if (pDist < hitDist + e.radius) {
+            // Small collision for enemies (20% smaller)
+            if (pDist < hitDist + (e.radius * CONFIG.enemyHitboxRatio)) {
                 if (invincibilityTimer > 0) {
                     enemies.splice(i, 1);
                     scorePoints(10); 
@@ -832,6 +960,7 @@
 
         for (let i = diamonds.length - 1; i >= 0; i--) {
             let d = diamonds[i];
+            checkMagnet(d); // Apply Magnet
             d.x += d.vx; d.y += d.vy;
             if(d.x < 0 || d.x > width) d.vx *= -1;
             if(d.y < 0 || d.y > height) d.vy *= -1;
@@ -847,6 +976,7 @@
 
         for (let i = powerups.length - 1; i >= 0; i--) {
             let p = powerups[i];
+            checkMagnet(p); // Apply Magnet
             let dist = Math.hypot(player.x - p.x, player.y - p.y);
             if (dist < player.size + p.radius) {
                 playSound('powerup');
@@ -966,7 +1096,6 @@
         fireTrails.forEach(f => {
             let alpha = f.life / CONFIG.fireTrailLife;
             
-            // Color Shift: Orange -> Yellow -> Smoke Gray
             if (alpha > 0.6) ctx.fillStyle = `rgba(230, 126, 34, ${alpha})`;
             else if (alpha > 0.3) ctx.fillStyle = `rgba(241, 196, 15, ${alpha})`;
             else ctx.fillStyle = `rgba(128, 128, 128, ${alpha})`;
@@ -1022,6 +1151,7 @@
             ctx.lineTo(d.x, d.y + d.radius);
             ctx.lineTo(d.x - d.radius, d.y);
             ctx.fill();
+            ctx.strokeStyle = 'white'; ctx.lineWidth = 1.5; ctx.stroke();
             if(Math.random() < 0.05) {
                 ctx.fillStyle = 'white';
                 ctx.fillRect(d.x - 2, d.y - 2, 4, 4);
@@ -1062,7 +1192,6 @@
             ctx.globalAlpha = 1.0;
         });
 
-        // DRAW PLAYER
         if (state === 'PLAYING' || state === 'COUNTDOWN') {
             ctx.save();
             ctx.translate(player.x, player.y);
@@ -1072,13 +1201,12 @@
                 ctx.beginPath(); ctx.arc(0,0, 20, 0, Math.PI*2); ctx.stroke();
             }
             if (invincibilityTimer > 0) {
-                 // DRAW GEAR
                  ctx.save();
-                 ctx.rotate(Date.now()/200); // Independent Spin
+                 ctx.rotate(Date.now()/200); 
                  ctx.beginPath();
                  const spikes = 8;
-                 const outer = 22;
-                 const inner = 14;
+                 const outer = 26; 
+                 const inner = 17;
                  for(let i=0; i<spikes*2; i++) {
                      const r = (i%2===0) ? outer : inner;
                      const a = (Math.PI * i / spikes);
@@ -1091,7 +1219,6 @@
                  ctx.restore();
             }
 
-            // Draw Ship Body
             ctx.rotate(player.angle);
             ctx.fillStyle = (invincibilityTimer > 0) ? '#f1c40f' : '#ecf0f1';
             ctx.beginPath();
