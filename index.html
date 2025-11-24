@@ -88,44 +88,80 @@
             max-width: 80%;
         }
 
-        #splash-screen, #start-screen, #game-over, #pause-screen { display: none; }
+        #start-screen, #game-over, #pause-screen { display: none; }
         
-        /* --- SPLASH ART STYLING --- */
+        /* --- SPLASH SCREEN (Landscape) --- */
         #splash-screen {
+            /* Ensure it captures clicks */
             pointer-events: auto; 
+            cursor: pointer;
             width: 100%;
             height: 100%;
             background: #000;
-            display: flex;
+            display: flex; /* Hidden via JS later */
             flex-direction: column;
             justify-content: center;
             align-items: center;
+            position: relative;
         }
 
-        #splash-img {
-            max-width: 80%;
-            max-height: 60%;
-            object-fit: contain;
-            margin-bottom: 20px;
-            border: 2px solid #00c6ff;
-            border-radius: 15px;
-            box-shadow: 0 0 30px rgba(0, 198, 255, 0.4);
+        /* Background Image for Splash */
+        #splash-bg {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            object-fit: cover;
+            opacity: 0.6;
+            z-index: 0;
+        }
+
+        /* Content Box on Splash */
+        .splash-content {
+            z-index: 1;
+            background: rgba(0, 0, 0, 0.7); /* Dark backing for text visibility */
+            padding: 20px 40px;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(5px);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .logo-title {
+            font-family: sans-serif;
+            font-size: 50px;
+            font-weight: 900;
+            text-transform: uppercase;
+            background: linear-gradient(to right, #00c6ff, #0072ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            filter: drop-shadow(0px 0px 5px rgba(0, 198, 255, 0.8));
+            margin-bottom: 10px;
+            line-height: 1.1;
         }
         
-        .instruction-text { font-size: 16px; color: #fff; margin-bottom: 20px; line-height: 1.5; font-family: sans-serif; }
-        .rotate-hint { color: #3498db; font-weight: bold; margin-bottom: 20px; font-size: 18px; animation: pulse 2s infinite; }
-
-        @keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
-
-        /* Rotation Warning Overlay */
-        #rotate-msg { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 999; flex-direction: column; justify-content: center; align-items: center; color: white; font-family: sans-serif;}
+        .instruction-text { font-size: 18px; color: #fff; margin: 0; font-family: sans-serif; font-weight: bold;}
+        
+        /* Rotation Warning Overlay (Portrait) */
+        #rotate-msg { 
+            /* Default to flex so it shows immediately, JS will hide if landscape */
+            display: flex; 
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: #000; 
+            z-index: 9999; 
+            flex-direction: column; 
+            justify-content: center; 
+            align-items: center; 
+            color: white; 
+            font-family: sans-serif;
+        }
 
         /* Multiplier Bar */
         #mult-bar-container { position: absolute; top: 40px; left: 15px; width: 100px; height: 6px; background: rgba(0,0,0,0.5); border: 1px solid #555; border-radius: 4px; display: none; }
         #mult-bar-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #f1c40f, #e67e22); border-radius: 3px; transition: width 0.1s linear; }
         
         /* Copyright Footer */
-        #copyright { position: absolute; bottom: 10px; width: 100%; text-align: center; color: rgba(255,255,255,0.3); font-size: 10px; font-family: sans-serif; }
+        #copyright { margin-top: 20px; color: rgba(255,255,255,0.4); font-size: 12px; font-family: sans-serif; }
     </style>
 </head>
 <body>
@@ -149,14 +185,17 @@
         <h2 id="countdown-text" style="font-size: 100px; color: #fff; text-shadow: 0 0 20px #f1c40f; display:none;">3</h2>
 
         <div id="splash-screen">
-            <img id="splash-img" src="splash.jpg" alt="Tilt to Thrive">
-            <p class="instruction-text" style="color: #bdc3c7; font-size: 18px;">Tap anywhere to begin</p>
-            <div id="copyright">© 2025 Steve Elkins</div>
+            <img id="splash-bg" src="splash.jpg" alt="Background">
+            <div class="splash-content">
+                <div class="logo-title">TILT TO<br>THRIVE</div>
+                <p class="instruction-text" style="color: #bdc3c7;">Tap anywhere to begin</p>
+                <div id="copyright">© 2025 Steve Elkins</div>
+            </div>
         </div>
 
         <div id="start-screen" class="screen-box">
             <h2 style="margin:0 0 15px 0; color:#2ecc71; display:block;">MISSION</h2>
-            <p class="instruction-text">
+            <p class="instruction-text" style="margin-bottom: 20px;">
                 Avoid the Red Dots<br>
                 Collect Yellow Diamonds<br>
                 Grab Golden Powerups
@@ -202,7 +241,7 @@
         hitboxRatio: 0.55,
         enemyHitboxRatio: 0.45, 
         diamondHitbox: 15,
-        magnetRadius: 50,       // REDUCED to 50 (70% smaller than 150)
+        magnetRadius: 50,       
         magnetForce: 0.5,       
         
         shieldRadius: 24,       
@@ -219,38 +258,23 @@
         multiplierResetTime: 15000 
     };
 
-    // --- AUDIO ENGINE (Sci-Fi Ambient) ---
+    // --- AUDIO ENGINE ---
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    let masterGain = null;
-    let delayNode = null;
+    let starOsc = null; 
+    let starGain = null;
+
     let isMusicPlaying = false;
-    let musicTimer = null;
-
-    // Scale: Dorian Mode (Spacey)
-    const SCALE = [146.83, 174.61, 196.00, 220.00, 261.63, 293.66, 349.23, 392.00]; // D3, F3, G3, A3, C4, D4, F4, G4
-
-    function setupAudio() {
-        if(masterGain) return;
-        masterGain = audioCtx.createGain();
-        masterGain.gain.value = 0.15; // Low Volume Background
-        
-        // Create Delay (Echo)
-        delayNode = audioCtx.createDelay();
-        delayNode.delayTime.value = 0.4; // 400ms echo
-        const feedback = audioCtx.createGain();
-        feedback.gain.value = 0.4;
-        
-        delayNode.connect(feedback);
-        feedback.connect(delayNode);
-        
-        delayNode.connect(masterGain);
-        masterGain.connect(audioCtx.destination);
-    }
+    let musicStartTime = 0;
+    let schedulerTimer;
+    const MUSIC_TOTAL_DURATION = 300; 
+    const C = 261.63, D = 293.66, E = 329.63, F = 349.23, G = 392.00, A = 440.00, B = 493.88;
+    const CHORD_PROGRESSION = [
+        [C, E, G], [G, B, D*2], [A, C*2, E*2], [F, A, C*2]
+    ];
+    let seqState = { chordIndex: 0, noteIndex: 0, beatCounter: 0 };
 
     function unlockAudio() {
-        if (audioCtx.state === 'suspended') audioCtx.resume();
-        setupAudio();
-        // Silent buffer
+        if (audioCtx.state === 'suspended') { audioCtx.resume(); }
         const buffer = audioCtx.createBuffer(1, 1, 22050); 
         const source = audioCtx.createBufferSource(); 
         source.buffer = buffer; 
@@ -258,53 +282,61 @@
         source.start(0); 
     }
 
-    function playSynthNote(freq) {
-        if(!masterGain) return;
-        const now = audioCtx.currentTime;
-        const osc = audioCtx.createOscillator();
-        const noteGain = audioCtx.createGain();
-        
-        osc.type = 'triangle';
-        osc.frequency.value = freq;
-        
-        // Envelope (Soft Attack, Long Release)
-        noteGain.gain.setValueAtTime(0, now);
-        noteGain.gain.linearRampToValueAtTime(0.3, now + 0.1);
-        noteGain.gain.exponentialRampToValueAtTime(0.001, now + 1.5);
-        
-        osc.connect(noteGain);
-        noteGain.connect(masterGain);
-        noteGain.connect(delayNode); // Send to echo
-        
-        osc.start(now);
-        osc.stop(now + 1.5);
-    }
-
-    function musicStep() {
-        if(!isMusicPlaying) return;
-        
-        // Randomly pick a note from scale
-        let note = SCALE[Math.floor(Math.random() * SCALE.length)];
-        
-        // Random Octave Shift
-        if(Math.random() > 0.7) note *= 2;
-        if(Math.random() > 0.9) note /= 2;
-
-        playSynthNote(note);
-
-        // Random Rhythm (between 200ms and 600ms)
-        let nextTime = 200 + Math.random() * 400;
-        musicTimer = setTimeout(musicStep, nextTime);
-    }
-
     function startSoundtrack() {
         if(isMusicPlaying) return;
-        setupAudio();
         isMusicPlaying = true;
-        musicStep();
+        musicStartTime = audioCtx.currentTime - (MUSIC_TOTAL_DURATION * 0.3); 
+        scheduleNextBeat();
     }
 
-    // --- SFX ---
+    function playEnvelopeNote(frequency, duration, type, attack, release) {
+        const now = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        
+        osc.type = type;
+        osc.frequency.setValueAtTime(frequency, now);
+        
+        gainNode.gain.setValueAtTime(0, now);
+        gainNode.gain.linearRampToValueAtTime(0.15, now + attack); 
+        gainNode.gain.setValueAtTime(0.15, now + duration - release);
+        gainNode.gain.linearRampToValueAtTime(0, now + duration);
+        
+        osc.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        osc.start(now);
+        osc.stop(now + duration + 0.1); 
+    }
+
+    function scheduleNextBeat() {
+        if(!isMusicPlaying) return;
+        const elapsed = audioCtx.currentTime - musicStartTime;
+        const progress = Math.min(elapsed / MUSIC_TOTAL_DURATION, 1.0);
+        
+        const currentBPM = 60 + (progress * (320 - 60));
+        const secondsPerBeat = 60.0 / currentBPM;
+
+        if (progress < 0.7) {
+            let baseFreq = CHORD_PROGRESSION[seqState.chordIndex][seqState.noteIndex];
+            playEnvelopeNote(baseFreq, secondsPerBeat * 0.8, 'triangle', 0.05, 0.1);
+            seqState.noteIndex = (seqState.noteIndex + 1) % 3;
+        } else {
+            let octave = (seqState.beatCounter % 2 === 0) ? 1 : 2; 
+            if (Math.random() > 0.8) octave = 3;
+            let baseFreq = CHORD_PROGRESSION[seqState.chordIndex][seqState.noteIndex];
+            playEnvelopeNote(baseFreq * octave, secondsPerBeat * 0.3, 'triangle', 0.01, 0.05);
+            seqState.noteIndex = (seqState.noteIndex + 1) % 3;
+        }
+
+        seqState.beatCounter++;
+        if (seqState.beatCounter % 4 === 0) {
+            seqState.chordIndex = (seqState.chordIndex + 1) % CHORD_PROGRESSION.length;
+            if (progress < 0.7) seqState.noteIndex = 0; 
+        }
+
+        schedulerTimer = setTimeout(scheduleNextBeat, secondsPerBeat * 1000);
+    }
+
     function playSound(type) {
         const now = audioCtx.currentTime;
         const osc = audioCtx.createOscillator();
@@ -327,6 +359,9 @@
         } else if (type === 'powerup') { 
             osc.type = 'triangle'; osc.frequency.setValueAtTime(300, now); osc.frequency.linearRampToValueAtTime(800, now + 0.3);
             gain.gain.setValueAtTime(0.1, now); gain.gain.linearRampToValueAtTime(0, now + 0.3); osc.start(now); osc.stop(now + 0.3);
+        } else if (type === 'powerdown') { 
+            osc.type = 'sawtooth'; osc.frequency.setValueAtTime(400, now); osc.frequency.linearRampToValueAtTime(100, now + 0.5);
+            gain.gain.setValueAtTime(0.1, now); gain.gain.linearRampToValueAtTime(0, now + 0.5); osc.start(now); osc.stop(now + 0.5);
         } else if (type === 'suck') { 
             osc.type = 'sine'; osc.frequency.setValueAtTime(50, now); osc.frequency.linearRampToValueAtTime(10, now + 0.1);
             gain.gain.setValueAtTime(0.2, now); gain.gain.linearRampToValueAtTime(0, now + 0.1); osc.start(now); osc.stop(now + 0.1);
@@ -341,7 +376,51 @@
         }
     }
 
-    // --- GAME STATE ---
+    function startStarSound() {
+        if (starOsc) return; 
+        starOsc = audioCtx.createOscillator();
+        starGain = audioCtx.createGain();
+        starOsc.type = 'square';
+        starOsc.frequency.setValueAtTime(150, audioCtx.currentTime);
+        
+        const lfo = audioCtx.createOscillator();
+        lfo.type = 'sine';
+        lfo.frequency.value = 10; 
+        const lfoGain = audioCtx.createGain();
+        lfoGain.gain.value = 500;
+        lfo.connect(lfoGain);
+        lfoGain.connect(starOsc.frequency);
+        lfo.start();
+
+        starOsc.connect(starGain);
+        starGain.connect(audioCtx.destination);
+        starGain.gain.value = 0.05;
+        starOsc.start();
+    }
+
+    function stopStarSound() {
+        if (starOsc) {
+            try { starOsc.stop(); playSound('powerdown'); } catch(e) {}
+            starOsc = null;
+            starGain = null;
+        }
+    }
+
+    // --- SETUP ---
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const uiSplash = document.getElementById('splash-screen');
+    const uiStart = document.getElementById('start-screen');
+    const uiPause = document.getElementById('pause-screen');
+    const uiGameOver = document.getElementById('game-over');
+    const uiCountdown = document.getElementById('countdown-text');
+    const elScore = document.getElementById('score-display');
+    const elCombo = document.getElementById('combo-display');
+    const elLives = document.getElementById('lives-display');
+    const rotateMsg = document.getElementById('rotate-msg');
+    const elMultBar = document.getElementById('mult-bar-fill');
+    const elMultContainer = document.getElementById('mult-bar-container');
+    
     const slider = document.getElementById('diff-slider');
     const diffVal = document.getElementById('diff-val');
     let difficultyLevel = 2; 
@@ -370,23 +449,11 @@
     
     let shieldActive = false;
     let invincibilityTimer = 0;
+    
     let boostTimer = 0;
     let boostOriginalVx = 0;
     let boostOriginalVy = 0;
     let spawnTimeout = null; 
-
-    // --- UI ELEMENTS ---
-    const uiSplash = document.getElementById('splash-screen');
-    const uiStart = document.getElementById('start-screen');
-    const uiPause = document.getElementById('pause-screen');
-    const uiGameOver = document.getElementById('game-over');
-    const uiCountdown = document.getElementById('countdown-text');
-    const elScore = document.getElementById('score-display');
-    const elCombo = document.getElementById('combo-display');
-    const elLives = document.getElementById('lives-display');
-    const rotateMsg = document.getElementById('rotate-msg');
-    const elMultBar = document.getElementById('mult-bar-fill');
-    const elMultContainer = document.getElementById('mult-bar-container');
 
     function resize() {
         width = window.innerWidth;
@@ -437,12 +504,16 @@
         else diffVal.innerText = "HARD";
     });
 
-    uiSplash.addEventListener('click', () => {
+    // Tap to Start (Splash Screen) - Added touchstart for mobile
+    function splashHandler(e) {
+        e.preventDefault();
         unlockAudio();
         uiSplash.style.display = 'none';
         uiStart.style.display = 'block';
         state = 'MENU';
-    });
+    }
+    uiSplash.addEventListener('click', splashHandler);
+    uiSplash.addEventListener('touchstart', splashHandler);
 
     document.getElementById('start-btn').addEventListener('click', (e) => {
         e.stopPropagation(); 
@@ -475,17 +546,19 @@
     function pauseGame() {
         state = 'PAUSED';
         uiPause.style.display = 'block';
+        if(starOsc) starOsc.disconnect();
         if(spawnTimeout) clearTimeout(spawnTimeout);
-        if(musicTimer) clearTimeout(musicTimer);
+        if(schedulerTimer) clearTimeout(schedulerTimer); 
         isMusicPlaying = false;
     }
 
     function resumeGame() {
         state = 'PLAYING';
         uiPause.style.display = 'none';
+        if(invincibilityTimer > 0 && starOsc) starOsc.connect(starGain);
         spawnManager(); 
         isMusicPlaying = true;
-        musicStep();
+        scheduleNextBeat();
     }
 
     async function initPermsAndStart() {
@@ -543,6 +616,7 @@
         player.vx = 0; player.vy = 0;
         shieldActive = false; invincibilityTimer = 0;
         boostTimer = 0;
+        stopStarSound();
 
         updateHUD();
         state = 'COUNTDOWN';
@@ -714,6 +788,7 @@
                 player.vx = Math.cos(player.angle) * CONFIG.maxVelocity;
                 player.vy = Math.sin(player.angle) * CONFIG.maxVelocity;
             } else if (phase < 300) {
+                // Hold
             } else {
                 let t = (phase - 300) / 100; 
                 player.vx = player.vx * (1-t) + boostOriginalVx * t;
@@ -784,6 +859,11 @@
 
         if (invincibilityTimer > 0) {
             invincibilityTimer -= 16;
+            if (invincibilityTimer <= 1000 && starOsc) stopStarSound(); 
+            if (invincibilityTimer <= 0) {
+                invincibilityTimer = 0;
+                stopStarSound();
+            }
         }
 
         // --- FIRE TRAILS ---
@@ -909,6 +989,7 @@
                 if(p.type === 'SHIELD') shieldActive = true;
                 if(p.type === 'STAR') {
                     invincibilityTimer = CONFIG.invincibilityTime;
+                    startStarSound(); 
                 }
                 if(p.type === 'HOLE') spawnBlackHole(p.x, p.y);
                 if(p.type === 'FIRE') activateFireBooster();
@@ -939,6 +1020,7 @@
         lives--;
         scoreMultiplier = 1; 
         combo = 1;
+        stopStarSound();
         updateHUD();
         createExplosion(player.x, player.y, '#ecf0f1', 50);
         playSound('crash');
@@ -1045,7 +1127,6 @@
                 ctx.beginPath();
                 ctx.arc(bh.x, bh.y, 15, 0, Math.PI*2);
                 ctx.fill();
-                
                 ctx.strokeStyle = '#9b59b6';
                 ctx.lineWidth = 2;
                 for(let i=0; i<5; i++) {
