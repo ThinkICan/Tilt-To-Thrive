@@ -90,23 +90,21 @@
 
         #start-screen, #game-over, #pause-screen { display: none; }
         
-        /* --- SPLASH SCREEN (Landscape) --- */
+        /* --- SPLASH ART STYLING --- */
         #splash-screen {
-            /* Ensure it captures clicks */
             pointer-events: auto; 
             cursor: pointer;
             width: 100%;
             height: 100%;
             background: #000;
-            display: flex; /* Hidden via JS later */
+            display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
             position: relative;
         }
 
-        /* Background Image for Splash */
-        #splash-bg {
+        #splash-img {
             position: absolute;
             top: 0; left: 0; width: 100%; height: 100%;
             object-fit: cover;
@@ -114,10 +112,9 @@
             z-index: 0;
         }
 
-        /* Content Box on Splash */
         .splash-content {
             z-index: 1;
-            background: rgba(0, 0, 0, 0.7); /* Dark backing for text visibility */
+            background: rgba(0, 0, 0, 0.7); 
             padding: 20px 40px;
             border-radius: 20px;
             border: 1px solid rgba(255, 255, 255, 0.1);
@@ -142,9 +139,7 @@
         
         .instruction-text { font-size: 18px; color: #fff; margin: 0; font-family: sans-serif; font-weight: bold;}
         
-        /* Rotation Warning Overlay (Portrait) */
         #rotate-msg { 
-            /* Default to flex so it shows immediately, JS will hide if landscape */
             display: flex; 
             position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
             background: #000; 
@@ -156,11 +151,9 @@
             font-family: sans-serif;
         }
 
-        /* Multiplier Bar */
         #mult-bar-container { position: absolute; top: 40px; left: 15px; width: 100px; height: 6px; background: rgba(0,0,0,0.5); border: 1px solid #555; border-radius: 4px; display: none; }
         #mult-bar-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #f1c40f, #e67e22); border-radius: 3px; transition: width 0.1s linear; }
         
-        /* Copyright Footer */
         #copyright { margin-top: 20px; color: rgba(255,255,255,0.4); font-size: 12px; font-family: sans-serif; }
     </style>
 </head>
@@ -258,23 +251,33 @@
         multiplierResetTime: 15000 
     };
 
-    // --- AUDIO ENGINE ---
+    // --- MUSIC ENGINE (Procedural Round) ---
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    let starOsc = null; 
-    let starGain = null;
-
+    
+    let masterGain = null;
     let isMusicPlaying = false;
-    let musicStartTime = 0;
-    let schedulerTimer;
-    const MUSIC_TOTAL_DURATION = 300; 
-    const C = 261.63, D = 293.66, E = 329.63, F = 349.23, G = 392.00, A = 440.00, B = 493.88;
-    const CHORD_PROGRESSION = [
-        [C, E, G], [G, B, D*2], [A, C*2, E*2], [F, A, C*2]
-    ];
-    let seqState = { chordIndex: 0, noteIndex: 0, beatCounter: 0 };
+    let musicTimer = null;
+    
+    // D Minor Pentatonic (Safe for rounds)
+    // D3, F3, G3, A3, C4, D4, F4
+    const SCALE = [146.83, 174.61, 196.00, 220.00, 261.63, 293.66, 349.23];
+    
+    // Melody Memory for the Round
+    const MELODY_BUFFER = []; 
+    const DELAY_BEATS = 8; // Voice 2 plays 8 beats later
+    const DOUBLE_DELAY = 16; // Voice 3 plays 16 beats later
+    let beatCount = 0;
+
+    function setupAudio() {
+        if(masterGain) return;
+        masterGain = audioCtx.createGain();
+        masterGain.gain.value = 0.08; // VERY LOW background volume
+        masterGain.connect(audioCtx.destination);
+    }
 
     function unlockAudio() {
-        if (audioCtx.state === 'suspended') { audioCtx.resume(); }
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        setupAudio();
         const buffer = audioCtx.createBuffer(1, 1, 22050); 
         const source = audioCtx.createBufferSource(); 
         source.buffer = buffer; 
@@ -282,61 +285,66 @@
         source.start(0); 
     }
 
-    function startSoundtrack() {
-        if(isMusicPlaying) return;
-        isMusicPlaying = true;
-        musicStartTime = audioCtx.currentTime - (MUSIC_TOTAL_DURATION * 0.3); 
-        scheduleNextBeat();
-    }
-
-    function playEnvelopeNote(frequency, duration, type, attack, release) {
+    function playNote(freq, type, volume, duration) {
+        if(!masterGain) return;
         const now = audioCtx.currentTime;
         const osc = audioCtx.createOscillator();
-        const gainNode = audioCtx.createGain();
+        const noteGain = audioCtx.createGain();
         
         osc.type = type;
-        osc.frequency.setValueAtTime(frequency, now);
+        osc.frequency.value = freq;
         
-        gainNode.gain.setValueAtTime(0, now);
-        gainNode.gain.linearRampToValueAtTime(0.15, now + attack); 
-        gainNode.gain.setValueAtTime(0.15, now + duration - release);
-        gainNode.gain.linearRampToValueAtTime(0, now + duration);
+        // Soft Envelope
+        noteGain.gain.setValueAtTime(0, now);
+        noteGain.gain.linearRampToValueAtTime(volume, now + 0.1);
+        noteGain.gain.linearRampToValueAtTime(0, now + duration);
         
-        osc.connect(gainNode);
-        gainNode.connect(audioCtx.destination);
+        osc.connect(noteGain);
+        noteGain.connect(masterGain);
+        
         osc.start(now);
-        osc.stop(now + duration + 0.1); 
+        osc.stop(now + duration + 0.1);
     }
 
-    function scheduleNextBeat() {
+    function musicStep() {
         if(!isMusicPlaying) return;
-        const elapsed = audioCtx.currentTime - musicStartTime;
-        const progress = Math.min(elapsed / MUSIC_TOTAL_DURATION, 1.0);
         
-        const currentBPM = 60 + (progress * (320 - 60));
-        const secondsPerBeat = 60.0 / currentBPM;
+        // 1. Generate New Note for Voice 1
+        // Weighted random to stay near previous notes usually
+        let note = SCALE[Math.floor(Math.random() * SCALE.length)];
+        MELODY_BUFFER.push(note);
+        
+        // VOICE 1 (Lead - Triangle)
+        playNote(note, 'triangle', 0.5, 0.4);
 
-        if (progress < 0.7) {
-            let baseFreq = CHORD_PROGRESSION[seqState.chordIndex][seqState.noteIndex];
-            playEnvelopeNote(baseFreq, secondsPerBeat * 0.8, 'triangle', 0.05, 0.1);
-            seqState.noteIndex = (seqState.noteIndex + 1) % 3;
-        } else {
-            let octave = (seqState.beatCounter % 2 === 0) ? 1 : 2; 
-            if (Math.random() > 0.8) octave = 3;
-            let baseFreq = CHORD_PROGRESSION[seqState.chordIndex][seqState.noteIndex];
-            playEnvelopeNote(baseFreq * octave, secondsPerBeat * 0.3, 'triangle', 0.01, 0.05);
-            seqState.noteIndex = (seqState.noteIndex + 1) % 3;
+        // VOICE 2 (Round - Sine)
+        if (MELODY_BUFFER.length > DELAY_BEATS) {
+            let note2 = MELODY_BUFFER[MELODY_BUFFER.length - 1 - DELAY_BEATS];
+            playNote(note2, 'sine', 0.3, 0.4);
         }
 
-        seqState.beatCounter++;
-        if (seqState.beatCounter % 4 === 0) {
-            seqState.chordIndex = (seqState.chordIndex + 1) % CHORD_PROGRESSION.length;
-            if (progress < 0.7) seqState.noteIndex = 0; 
+        // VOICE 3 (Bass Round - Sine Octave Down)
+        if (MELODY_BUFFER.length > DOUBLE_DELAY) {
+            let note3 = MELODY_BUFFER[MELODY_BUFFER.length - 1 - DOUBLE_DELAY];
+            playNote(note3 / 2, 'sine', 0.4, 0.8); // Longer bass note
         }
 
-        schedulerTimer = setTimeout(scheduleNextBeat, secondsPerBeat * 1000);
+        // Rhythm: Fixed tempo (120 BPM approx -> 500ms)
+        // Vary slightly for human feel
+        let nextTime = 400; 
+        
+        beatCount++;
+        musicTimer = setTimeout(musicStep, nextTime);
     }
 
+    function startSoundtrack() {
+        if(isMusicPlaying) return;
+        setupAudio();
+        isMusicPlaying = true;
+        musicStep();
+    }
+
+    // --- SFX ---
     function playSound(type) {
         const now = audioCtx.currentTime;
         const osc = audioCtx.createOscillator();
@@ -376,34 +384,24 @@
         }
     }
 
+    let starOsc = null; 
+    let starGain = null;
     function startStarSound() {
         if (starOsc) return; 
         starOsc = audioCtx.createOscillator();
         starGain = audioCtx.createGain();
         starOsc.type = 'square';
         starOsc.frequency.setValueAtTime(150, audioCtx.currentTime);
-        
         const lfo = audioCtx.createOscillator();
-        lfo.type = 'sine';
-        lfo.frequency.value = 10; 
-        const lfoGain = audioCtx.createGain();
-        lfoGain.gain.value = 500;
-        lfo.connect(lfoGain);
-        lfoGain.connect(starOsc.frequency);
+        lfo.type = 'sine'; lfo.frequency.value = 10; 
+        const lfoGain = audioCtx.createGain(); lfoGain.gain.value = 500;
+        lfo.connect(lfoGain); lfoGain.connect(starOsc.frequency);
         lfo.start();
-
-        starOsc.connect(starGain);
-        starGain.connect(audioCtx.destination);
-        starGain.gain.value = 0.05;
-        starOsc.start();
+        starOsc.connect(starGain); starGain.connect(audioCtx.destination);
+        starGain.gain.value = 0.05; starOsc.start();
     }
-
     function stopStarSound() {
-        if (starOsc) {
-            try { starOsc.stop(); playSound('powerdown'); } catch(e) {}
-            starOsc = null;
-            starGain = null;
-        }
+        if (starOsc) { try { starOsc.stop(); playSound('powerdown'); } catch(e) {} starOsc = null; starGain = null; }
     }
 
     // --- SETUP ---
@@ -494,17 +492,9 @@
         });
     }
 
+    // UI State
     uiSplash.style.display = 'flex';
 
-    // --- INPUTS ---
-    slider.addEventListener('input', (e) => {
-        difficultyLevel = parseInt(e.target.value);
-        if(difficultyLevel === 1) diffVal.innerText = "EASY";
-        else if(difficultyLevel === 2) diffVal.innerText = "NORMAL";
-        else diffVal.innerText = "HARD";
-    });
-
-    // Tap to Start (Splash Screen) - Added touchstart for mobile
     function splashHandler(e) {
         e.preventDefault();
         unlockAudio();
@@ -515,15 +505,20 @@
     uiSplash.addEventListener('click', splashHandler);
     uiSplash.addEventListener('touchstart', splashHandler);
 
+    slider.addEventListener('input', (e) => {
+        difficultyLevel = parseInt(e.target.value);
+        if(difficultyLevel === 1) diffVal.innerText = "EASY";
+        else if(difficultyLevel === 2) diffVal.innerText = "NORMAL";
+        else diffVal.innerText = "HARD";
+    });
+
     document.getElementById('start-btn').addEventListener('click', (e) => {
         e.stopPropagation(); 
-        unlockAudio(); 
         initPermsAndStart();
     });
     
     document.getElementById('retry-btn').addEventListener('click', (e) => {
         e.stopPropagation();
-        unlockAudio();
         startCountdownSequence();
     });
 
@@ -548,7 +543,7 @@
         uiPause.style.display = 'block';
         if(starOsc) starOsc.disconnect();
         if(spawnTimeout) clearTimeout(spawnTimeout);
-        if(schedulerTimer) clearTimeout(schedulerTimer); 
+        if(musicTimer) clearTimeout(musicTimer);
         isMusicPlaying = false;
     }
 
@@ -558,7 +553,7 @@
         if(invincibilityTimer > 0 && starOsc) starOsc.connect(starGain);
         spawnManager(); 
         isMusicPlaying = true;
-        scheduleNextBeat();
+        musicStep();
     }
 
     async function initPermsAndStart() {
@@ -788,7 +783,6 @@
                 player.vx = Math.cos(player.angle) * CONFIG.maxVelocity;
                 player.vy = Math.sin(player.angle) * CONFIG.maxVelocity;
             } else if (phase < 300) {
-                // Hold
             } else {
                 let t = (phase - 300) / 100; 
                 player.vx = player.vx * (1-t) + boostOriginalVx * t;
