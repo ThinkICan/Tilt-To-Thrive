@@ -91,41 +91,32 @@
         #splash-screen, #start-screen, #game-over, #pause-screen { display: none; }
         
         /* --- SPLASH ART STYLING --- */
-        /* CSS recreation of the provided Cosmic theme */
         #splash-screen {
-            background: radial-gradient(circle at center, #2b1055, #000000);
-            border: 2px solid #8e44ad;
-            box-shadow: 0 0 50px rgba(142, 68, 173, 0.5);
-            width: 80%;
-            max-width: 500px;
+            /* Important fix: make clickable */
+            pointer-events: auto; 
+            width: 100%;
+            height: 100%;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
         }
 
-        .logo-title {
-            font-family: sans-serif;
-            font-size: 55px;
-            font-weight: 900;
-            text-transform: uppercase;
-            background: linear-gradient(to right, #00c6ff, #0072ff);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            filter: drop-shadow(0px 0px 5px rgba(0, 198, 255, 0.8));
+        #splash-img {
+            max-width: 80%;
+            max-height: 60%;
+            object-fit: contain;
             margin-bottom: 20px;
-            line-height: 1.1;
+            border: 2px solid #00c6ff;
+            border-radius: 15px;
+            box-shadow: 0 0 30px rgba(0, 198, 255, 0.4);
         }
         
         .instruction-text { font-size: 16px; color: #fff; margin-bottom: 20px; line-height: 1.5; font-family: sans-serif; }
-        
-        .rotate-hint { 
-            color: #fff; 
-            font-weight: bold; 
-            margin-bottom: 20px; 
-            font-size: 22px; 
-            font-family: sans-serif;
-            text-shadow: 0 0 10px #00c6ff;
-            animation: pulse 2s infinite; 
-        }
+        .rotate-hint { color: #3498db; font-weight: bold; margin-bottom: 20px; font-size: 18px; animation: pulse 2s infinite; }
 
-        @keyframes pulse { 0% { opacity: 0.7; transform: scale(1); } 50% { opacity: 1; transform: scale(1.05); } 100% { opacity: 0.7; transform: scale(1); } }
+        @keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
 
         /* Rotation Warning Overlay */
         #rotate-msg { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 999; flex-direction: column; justify-content: center; align-items: center; color: white; font-family: sans-serif;}
@@ -141,7 +132,7 @@
 <body>
 
     <div id="rotate-msg">
-        <div class="logo-title" style="font-size: 40px;">Tilt to Thrive</div>
+        <img src="icon.png" style="width: 150px; height: 150px; border-radius: 30px; margin-bottom: 20px; box-shadow: 0 0 30px #00c6ff;">
         <div style="font-size: 50px; color:#00c6ff; margin: 20px;">⟳</div>
         <p style="color:white; font-size: 24px; font-weight:bold;">Rotate to Landscape</p>
     </div>
@@ -158,13 +149,9 @@
     <div id="ui-layer">
         <h2 id="countdown-text" style="font-size: 100px; color: #fff; text-shadow: 0 0 20px #f1c40f; display:none;">3</h2>
 
-        <div id="splash-screen" style="display:flex; flex-direction:column; align-items:center;">
-            <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #1a1a2e, #16213e); border-radius: 20px; display: flex; justify-content: center; align-items: center; border: 2px solid #00c6ff; box-shadow: 0 0 20px #00c6ff; margin-bottom: 10px;">
-                <div style="width: 0; height: 0; border-left: 20px solid transparent; border-right: 20px solid transparent; border-bottom: 40px solid #00c6ff;"></div>
-            </div>
-            <div class="logo-title">TILT TO<br>THRIVE</div>
-            <div class="rotate-hint">Rotate to Landscape Mode</div>
-            <p class="instruction-text" style="color: #bdc3c7; font-size: 14px;">Tap anywhere to begin</p>
+        <div id="splash-screen">
+            <img id="splash-img" src="splash.png" alt="Tilt to Thrive">
+            <p class="instruction-text" style="color: #bdc3c7; font-size: 18px;">Tap anywhere to begin</p>
             <div id="copyright">© 2025 Steve Elkins</div>
         </div>
 
@@ -202,7 +189,6 @@
 <script>
     // --- CONFIG ---
     const CONFIG = {
-        // PHYSICS
         friction: 0.96,         
         acceleration: 0.01,     
         inputExponent: 1.4,     
@@ -210,27 +196,23 @@
         maxTiltAngle: 35,
         turnBoost: 1.5,         
         
-        // Gameplay
         baseSpeed: 0.1, 
         spawnRate: 0.05,
-        waveDuration: 60000,    // 60 Seconds for wave reset
+        waveDuration: 60000,
         
-        // Hitboxes & Magnetism
-        hitboxRatio: 0.55,      // Standard Hitbox
-        enemyHitboxRatio: 0.45, // Smaller hitbox for enemies (Near Miss feel)
+        hitboxRatio: 0.55,
+        enemyHitboxRatio: 0.45, 
         diamondHitbox: 15,
-        magnetRadius: 150,      // Range to pull items
-        magnetForce: 0.5,       // Strength of pull
+        magnetRadius: 150,      
+        magnetForce: 0.5,       
         
         shieldRadius: 24,       
         invincibilityTime: 8000,
         
-        // Black Hole
         blackHoleDuration: 10000,
         blackHoleDelay: 2000,   
         blackHoleForce: 0.6,    
         
-        // Fire Booster
         fireDuration: 400,      
         fireTrailLife: 5000,    
         fireRadius: 25,         
@@ -238,14 +220,10 @@
         multiplierResetTime: 15000 
     };
 
-    // --- MUSIC ENGINE (Procedural) ---
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    
-    // Sound FX
     let starOsc = null; 
     let starGain = null;
 
-    // Soundtrack State
     let isMusicPlaying = false;
     let musicStartTime = 0;
     let schedulerTimer;
@@ -258,6 +236,7 @@
 
     function unlockAudio() {
         if (audioCtx.state === 'suspended') { audioCtx.resume(); }
+        // Silent buffer to wake up audio engine
         const buffer = audioCtx.createBuffer(1, 1, 22050); 
         const source = audioCtx.createBufferSource(); 
         source.buffer = buffer; 
@@ -268,7 +247,6 @@
     function startSoundtrack() {
         if(isMusicPlaying) return;
         isMusicPlaying = true;
-        // Start at 30% progress (Skip Largo, jump to Moderato)
         musicStartTime = audioCtx.currentTime - (MUSIC_TOTAL_DURATION * 0.3); 
         scheduleNextBeat();
     }
@@ -282,7 +260,7 @@
         osc.frequency.setValueAtTime(frequency, now);
         
         gainNode.gain.setValueAtTime(0, now);
-        gainNode.gain.linearRampToValueAtTime(0.15, now + attack); // Low volume for bg music
+        gainNode.gain.linearRampToValueAtTime(0.15, now + attack); 
         gainNode.gain.setValueAtTime(0.15, now + duration - release);
         gainNode.gain.linearRampToValueAtTime(0, now + duration);
         
@@ -297,18 +275,14 @@
         const elapsed = audioCtx.currentTime - musicStartTime;
         const progress = Math.min(elapsed / MUSIC_TOTAL_DURATION, 1.0);
         
-        // Map progress to BPM (60 to 320)
         const currentBPM = 60 + (progress * (320 - 60));
         const secondsPerBeat = 60.0 / currentBPM;
 
-        // Logic derived from your snippet
         if (progress < 0.7) {
-            // Moderato
             let baseFreq = CHORD_PROGRESSION[seqState.chordIndex][seqState.noteIndex];
             playEnvelopeNote(baseFreq, secondsPerBeat * 0.8, 'triangle', 0.05, 0.1);
             seqState.noteIndex = (seqState.noteIndex + 1) % 3;
         } else {
-            // Presto
             let octave = (seqState.beatCounter % 2 === 0) ? 1 : 2; 
             if (Math.random() > 0.8) octave = 3;
             let baseFreq = CHORD_PROGRESSION[seqState.chordIndex][seqState.noteIndex];
@@ -421,7 +395,7 @@
 
     let scoreMultiplier = 1;
     let lastScoreTime = 0;
-    let lastWaveTime = 0; // For wave resets
+    let lastWaveTime = 0; 
 
     let rawTiltBeta = 0, rawTiltGamma = 0; 
     let baseTiltBeta = 0, baseTiltGamma = 0; 
@@ -493,7 +467,7 @@
     });
 
     uiSplash.addEventListener('click', () => {
-        unlockAudio();
+        unlockAudio(); // Unlock Audio Ctx on first user interaction
         uiSplash.style.display = 'none';
         uiStart.style.display = 'block';
         state = 'MENU';
@@ -501,13 +475,11 @@
 
     document.getElementById('start-btn').addEventListener('click', (e) => {
         e.stopPropagation(); 
-        unlockAudio(); 
         initPermsAndStart();
     });
     
     document.getElementById('retry-btn').addEventListener('click', (e) => {
         e.stopPropagation();
-        unlockAudio();
         startCountdownSequence();
     });
 
@@ -532,7 +504,7 @@
         uiPause.style.display = 'block';
         if(starOsc) starOsc.disconnect();
         if(spawnTimeout) clearTimeout(spawnTimeout);
-        if(schedulerTimer) clearTimeout(schedulerTimer); // Pause Music
+        if(schedulerTimer) clearTimeout(schedulerTimer); 
         isMusicPlaying = false;
     }
 
@@ -541,7 +513,6 @@
         uiPause.style.display = 'none';
         if(invincibilityTimer > 0 && starOsc) starOsc.connect(starGain);
         spawnManager(); 
-        // Resume Music
         isMusicPlaying = true;
         scheduleNextBeat();
     }
@@ -571,14 +542,13 @@
         
         if(spawnTimeout) clearTimeout(spawnTimeout);
 
-        // Configure Difficulty
-        if(difficultyLevel === 1) { // Easy
+        if(difficultyLevel === 1) { 
             CONFIG.baseSpeed = 0.05;
             CONFIG.spawnRate = 0.02;
-        } else if(difficultyLevel === 2) { // Normal
+        } else if(difficultyLevel === 2) { 
             CONFIG.baseSpeed = 0.1;
             CONFIG.spawnRate = 0.04;
-        } else { // Hard
+        } else { 
             CONFIG.baseSpeed = 0.15;
             CONFIG.spawnRate = 0.06;
         }
@@ -592,7 +562,7 @@
         if(lives <= 0 || state === 'MENU') {
             lives = 3; score = 0; 
             scoreMultiplier = 1; 
-            startSoundtrack(); // Start Music
+            startSoundtrack(); 
         }
         
         lastScoreTime = Date.now();
@@ -636,23 +606,15 @@
     function spawnManager() {
         if (state !== 'PLAYING') return;
         
-        // --- WAVE SYSTEM ---
-        // Reset difficulty ramp every 60 seconds
         let waveTime = Date.now() - lastWaveTime;
         if (waveTime > CONFIG.waveDuration) {
-            lastWaveTime = Date.now(); // Reset Timer
-            // We don't reset score, but we reset the impact of score on spawn rate
-            // This creates the "Wave" effect
+            lastWaveTime = Date.now(); 
         }
         
-        // Calculate ramp based on time within current wave, not total score
-        let waveProgress = waveTime / 1000; // Seconds in current wave
+        let waveProgress = waveTime / 1000; 
         let ramp = waveProgress * 0.0005; 
         
-        // Spawn Enemy
         if (Math.random() < CONFIG.spawnRate + ramp) spawnEnemy();
-        
-        // Spawn Loot
         if (Math.random() < 0.06) spawnDiamond(); 
         if (Math.random() < 0.016) spawnPowerup(); 
         
@@ -660,7 +622,6 @@
     }
 
     function spawnEnemy() {
-        // Safe Spawn Logic
         let ex, ey, dist;
         let safe = false;
         let attempts = 0;
@@ -672,9 +633,8 @@
             else if(edge === 2) { ex = Math.random() * width; ey = height + 20; }
             else { ex = -20; ey = Math.random() * height; }
             
-            // Check distance to player
             dist = Math.hypot(player.x - ex, player.y - ey);
-            if (dist > 300) safe = true; // 300px Safe Zone
+            if (dist > 300) safe = true; 
             attempts++;
         }
         
@@ -752,6 +712,27 @@
         updateHUD();
     }
 
+    // --- MAGNETISM HELPER ---
+    function checkMagnet(item) {
+        let dx = player.x - item.x;
+        let dy = player.y - item.y;
+        let distSq = dx*dx + dy*dy;
+        if (distSq < CONFIG.magnetRadius * CONFIG.magnetRadius) {
+            let dist = Math.sqrt(distSq);
+            // Accelerate item towards player
+            item.vx = (item.vx || 0) + (dx / dist) * CONFIG.magnetForce;
+            item.vy = (item.vy || 0) + (dy / dist) * CONFIG.magnetForce;
+            
+            // Apply drag to item so it doesn't orbit forever
+            item.vx *= 0.9;
+            item.vy *= 0.9;
+            
+            // Move
+            item.x += item.vx;
+            item.y += item.vy;
+        }
+    }
+
     function update() {
         let timeSinceScore = Date.now() - lastScoreTime;
         if (timeSinceScore > CONFIG.multiplierResetTime && scoreMultiplier > 1) {
@@ -800,13 +781,14 @@
             let forceX = Math.sign(diffX) * Math.pow(Math.abs(diffX), CONFIG.inputExponent);
             let forceY = Math.sign(diffY) * Math.pow(Math.abs(diffY), CONFIG.inputExponent);
 
-            // Dot Boost
             let speed = Math.sqrt(player.vx*player.vx + player.vy*player.vy);
             let vxNorm = (speed > 0.1) ? player.vx / speed : 0;
             let vyNorm = (speed > 0.1) ? player.vy / speed : 0;
+
             let totalForce = Math.sqrt(forceX*forceX + forceY*forceY);
             let fxNorm = (totalForce > 0) ? (forceX) / totalForce : 0;
             let fyNorm = (totalForce > 0) ? (forceY) / totalForce : 0;
+
             let dot = (vxNorm * (fxNorm * orientationSign)) + (vyNorm * (-fyNorm * orientationSign));
             let turnFactor = 1 - Math.abs(dot); 
             let dynamicAccel = CONFIG.acceleration * (1 + (turnFactor * CONFIG.turnBoost));
@@ -845,19 +827,6 @@
             }
         }
 
-        // --- MAGNETISM ---
-        // Pull items towards player if close
-        const checkMagnet = (item) => {
-            let dx = player.x - item.x;
-            let dy = player.y - item.y;
-            let distSq = dx*dx + dy*dy;
-            if (distSq < CONFIG.magnetRadius * CONFIG.magnetRadius) {
-                let dist = Math.sqrt(distSq);
-                item.x += (dx / dist) * CONFIG.magnetForce * 5; // 5x speed multiplier for snapiness
-                item.y += (dy / dist) * CONFIG.magnetForce * 5;
-            }
-        };
-
         // --- FIRE TRAILS ---
         for (let i = fireTrails.length - 1; i >= 0; i--) {
             let f = fireTrails[i];
@@ -888,7 +857,6 @@
                 if (Math.sqrt(distSq) < 20) { 
                     enemies.splice(j, 1); scorePoints(10); playSound('suck'); createExplosion(bh.x, bh.y, '#8e44ad', 5);
                 } else {
-                    // Doubled force for enemies
                     let f = (CONFIG.blackHoleForce * 2.0 * 1500) / Math.max(distSq, 100);
                     e.x += (dx / Math.sqrt(distSq)) * f;
                     e.y += (dy / Math.sqrt(distSq)) * f;
@@ -913,7 +881,6 @@
             let pdy = bh.y - player.y;
             let pDistSq = pdx*pdx + pdy*pdy;
             let pDist = Math.sqrt(pDistSq);
-            // Weakened pull on player (0.9 multiplier)
             let pf = (CONFIG.blackHoleForce * 0.9 * 300) / Math.max(pDistSq, 100); 
             player.vx += (pdx / pDist) * pf;
             player.vy += (pdy / pDist) * pf;
@@ -936,11 +903,9 @@
             e.x += e.vx;
             e.y += e.vy;
             
-            // Use Expanded Shield Radius if active
             let hitDist = (shieldActive || invincibilityTimer > 0) ? CONFIG.shieldRadius : (player.size * CONFIG.hitboxRatio);
             let pDist = Math.hypot(player.x - e.x, player.y - e.y);
 
-            // Small collision for enemies (20% smaller)
             if (pDist < hitDist + (e.radius * CONFIG.enemyHitboxRatio)) {
                 if (invincibilityTimer > 0) {
                     enemies.splice(i, 1);
@@ -960,7 +925,8 @@
 
         for (let i = diamonds.length - 1; i >= 0; i--) {
             let d = diamonds[i];
-            checkMagnet(d); // Apply Magnet
+            checkMagnet(d); // MAGNET
+            
             d.x += d.vx; d.y += d.vy;
             if(d.x < 0 || d.x > width) d.vx *= -1;
             if(d.y < 0 || d.y > height) d.vy *= -1;
@@ -976,7 +942,8 @@
 
         for (let i = powerups.length - 1; i >= 0; i--) {
             let p = powerups[i];
-            checkMagnet(p); // Apply Magnet
+            checkMagnet(p); // MAGNET
+            
             let dist = Math.hypot(player.x - p.x, player.y - p.y);
             if (dist < player.size + p.radius) {
                 playSound('powerup');
@@ -1092,10 +1059,8 @@
             }
         });
 
-        // --- FIRE TRAIL (Oscillating Squares) ---
         fireTrails.forEach(f => {
             let alpha = f.life / CONFIG.fireTrailLife;
-            
             if (alpha > 0.6) ctx.fillStyle = `rgba(230, 126, 34, ${alpha})`;
             else if (alpha > 0.3) ctx.fillStyle = `rgba(241, 196, 15, ${alpha})`;
             else ctx.fillStyle = `rgba(128, 128, 128, ${alpha})`;
@@ -1103,9 +1068,7 @@
             ctx.save();
             ctx.translate(f.x, f.y);
             ctx.rotate(f.angle + (Date.now()/200)); 
-            
             let oscSize = f.size * (0.8 + Math.sin(Date.now()/50)*0.2); 
-            
             ctx.fillRect(-oscSize/2, -oscSize/2, oscSize, oscSize);
             ctx.restore();
         });
@@ -1125,7 +1088,6 @@
                 ctx.beginPath();
                 ctx.arc(bh.x, bh.y, 15, 0, Math.PI*2);
                 ctx.fill();
-                
                 ctx.strokeStyle = '#9b59b6';
                 ctx.lineWidth = 2;
                 for(let i=0; i<5; i++) {
