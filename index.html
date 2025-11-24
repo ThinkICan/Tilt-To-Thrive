@@ -105,56 +105,41 @@
         }
 
         #splash-img {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            object-fit: cover;
-            opacity: 0.6;
-            z-index: 0;
-        }
-
-        .splash-content {
-            z-index: 1;
-            background: rgba(0, 0, 0, 0.7); 
-            padding: 20px 40px;
-            border-radius: 20px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(5px);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-
-        .logo-title {
-            font-family: sans-serif;
-            font-size: 50px;
-            font-weight: 900;
-            text-transform: uppercase;
-            background: linear-gradient(to right, #00c6ff, #0072ff);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            filter: drop-shadow(0px 0px 5px rgba(0, 198, 255, 0.8));
-            margin-bottom: 10px;
-            line-height: 1.1;
+            max-width: 80%;
+            max-height: 60%;
+            object-fit: contain;
+            margin-bottom: 20px;
+            border: 2px solid #00c6ff;
+            border-radius: 15px;
+            box-shadow: 0 0 30px rgba(0, 198, 255, 0.4);
         }
         
-        .instruction-text { font-size: 18px; color: #fff; margin: 0; font-family: sans-serif; font-weight: bold;}
+        .instruction-text { font-size: 16px; color: #fff; margin-bottom: 20px; line-height: 1.5; font-family: sans-serif; }
         
-        #rotate-msg { 
-            display: flex; 
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-            background: #000; 
-            z-index: 9999; 
-            flex-direction: column; 
-            justify-content: center; 
-            align-items: center; 
-            color: white; 
-            font-family: sans-serif;
-        }
+        /* Rotation Warning Overlay */
+        #rotate-msg { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 999; flex-direction: column; justify-content: center; align-items: center; color: white; font-family: sans-serif;}
 
+        /* Multiplier Bar */
         #mult-bar-container { position: absolute; top: 40px; left: 15px; width: 100px; height: 6px; background: rgba(0,0,0,0.5); border: 1px solid #555; border-radius: 4px; display: none; }
         #mult-bar-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #f1c40f, #e67e22); border-radius: 3px; transition: width 0.1s linear; }
         
-        #copyright { margin-top: 20px; color: rgba(255,255,255,0.4); font-size: 12px; font-family: sans-serif; }
+        #copyright { position: absolute; bottom: 10px; width: 100%; text-align: center; color: rgba(255,255,255,0.3); font-size: 10px; font-family: sans-serif; }
+        
+        /* Formation Warning */
+        #formation-warning {
+            display: none;
+            position: absolute;
+            top: 30%;
+            width: 100%;
+            text-align: center;
+            font-size: 40px;
+            color: #e74c3c;
+            font-weight: 900;
+            text-shadow: 0 0 20px red;
+            pointer-events: none;
+            animation: flash 0.5s infinite;
+        }
+        @keyframes flash { 0% {opacity:0;} 50% {opacity:1;} 100% {opacity:0;} }
     </style>
 </head>
 <body>
@@ -176,14 +161,12 @@
     
     <div id="ui-layer">
         <h2 id="countdown-text" style="font-size: 100px; color: #fff; text-shadow: 0 0 20px #f1c40f; display:none;">3</h2>
+        <div id="formation-warning">⚠ SWARM DETECTED ⚠</div>
 
         <div id="splash-screen">
-            <img id="splash-bg" src="splash.jpg" alt="Background">
-            <div class="splash-content">
-                <div class="logo-title">TILT TO<br>THRIVE</div>
-                <p class="instruction-text" style="color: #bdc3c7;">Tap anywhere to begin</p>
-                <div id="copyright">© 2025 Steve Elkins</div>
-            </div>
+            <img id="splash-img" src="splash.jpg" alt="Tilt to Thrive">
+            <p class="instruction-text" style="color: #bdc3c7; font-size: 18px;">Tap anywhere to begin</p>
+            <div id="copyright">© 2025 Steve Elkins</div>
         </div>
 
         <div id="start-screen" class="screen-box">
@@ -220,16 +203,17 @@
 <script>
     // --- CONFIG ---
     const CONFIG = {
-        friction: 0.96,         
-        acceleration: 0.01,     
+        // CUBE LAW PHYSICS
+        baseFriction: 0.99,     // Slippery at low speeds
+        dragCoefficient: 0.05,  // High drag at high speeds (Cube law)
+        acceleration: 0.015,    // High accel to overcome drag
         inputExponent: 1.4,     
-        maxVelocity: 11.0,
+        maxVelocity: 12.0,
         maxTiltAngle: 35,
         turnBoost: 1.5,         
         
         baseSpeed: 0.1, 
         spawnRate: 0.05,
-        waveDuration: 60000,
         
         hitboxRatio: 0.55,
         enemyHitboxRatio: 0.45, 
@@ -251,33 +235,20 @@
         multiplierResetTime: 15000 
     };
 
-    // --- MUSIC ENGINE (Procedural Round) ---
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    
-    let masterGain = null;
-    let isMusicPlaying = false;
-    let musicTimer = null;
-    
-    // D Minor Pentatonic (Safe for rounds)
-    // D3, F3, G3, A3, C4, D4, F4
-    const SCALE = [146.83, 174.61, 196.00, 220.00, 261.63, 293.66, 349.23];
-    
-    // Melody Memory for the Round
-    const MELODY_BUFFER = []; 
-    const DELAY_BEATS = 8; // Voice 2 plays 8 beats later
-    const DOUBLE_DELAY = 16; // Voice 3 plays 16 beats later
-    let beatCount = 0;
+    let starOsc = null; 
+    let starGain = null;
 
-    function setupAudio() {
-        if(masterGain) return;
-        masterGain = audioCtx.createGain();
-        masterGain.gain.value = 0.08; // VERY LOW background volume
-        masterGain.connect(audioCtx.destination);
-    }
+    let isMusicPlaying = false;
+    let musicStartTime = 0;
+    let schedulerTimer;
+    const MUSIC_TOTAL_DURATION = 300; 
+    const C = 261.63, D = 293.66, E = 329.63, F = 349.23, G = 392.00, A = 440.00, B = 493.88;
+    const CHORD_PROGRESSION = [[C, E, G], [G, B, D*2], [A, C*2, E*2], [F, A, C*2]];
+    let seqState = { chordIndex: 0, noteIndex: 0, beatCounter: 0 };
 
     function unlockAudio() {
-        if (audioCtx.state === 'suspended') audioCtx.resume();
-        setupAudio();
+        if (audioCtx.state === 'suspended') { audioCtx.resume(); }
         const buffer = audioCtx.createBuffer(1, 1, 22050); 
         const source = audioCtx.createBufferSource(); 
         source.buffer = buffer; 
@@ -285,66 +256,52 @@
         source.start(0); 
     }
 
-    function playNote(freq, type, volume, duration) {
-        if(!masterGain) return;
-        const now = audioCtx.currentTime;
-        const osc = audioCtx.createOscillator();
-        const noteGain = audioCtx.createGain();
-        
-        osc.type = type;
-        osc.frequency.value = freq;
-        
-        // Soft Envelope
-        noteGain.gain.setValueAtTime(0, now);
-        noteGain.gain.linearRampToValueAtTime(volume, now + 0.1);
-        noteGain.gain.linearRampToValueAtTime(0, now + duration);
-        
-        osc.connect(noteGain);
-        noteGain.connect(masterGain);
-        
-        osc.start(now);
-        osc.stop(now + duration + 0.1);
-    }
-
-    function musicStep() {
-        if(!isMusicPlaying) return;
-        
-        // 1. Generate New Note for Voice 1
-        // Weighted random to stay near previous notes usually
-        let note = SCALE[Math.floor(Math.random() * SCALE.length)];
-        MELODY_BUFFER.push(note);
-        
-        // VOICE 1 (Lead - Triangle)
-        playNote(note, 'triangle', 0.5, 0.4);
-
-        // VOICE 2 (Round - Sine)
-        if (MELODY_BUFFER.length > DELAY_BEATS) {
-            let note2 = MELODY_BUFFER[MELODY_BUFFER.length - 1 - DELAY_BEATS];
-            playNote(note2, 'sine', 0.3, 0.4);
-        }
-
-        // VOICE 3 (Bass Round - Sine Octave Down)
-        if (MELODY_BUFFER.length > DOUBLE_DELAY) {
-            let note3 = MELODY_BUFFER[MELODY_BUFFER.length - 1 - DOUBLE_DELAY];
-            playNote(note3 / 2, 'sine', 0.4, 0.8); // Longer bass note
-        }
-
-        // Rhythm: Fixed tempo (120 BPM approx -> 500ms)
-        // Vary slightly for human feel
-        let nextTime = 400; 
-        
-        beatCount++;
-        musicTimer = setTimeout(musicStep, nextTime);
-    }
-
     function startSoundtrack() {
         if(isMusicPlaying) return;
-        setupAudio();
         isMusicPlaying = true;
-        musicStep();
+        musicStartTime = audioCtx.currentTime - (MUSIC_TOTAL_DURATION * 0.3); 
+        scheduleNextBeat();
     }
 
-    // --- SFX ---
+    function playEnvelopeNote(frequency, duration, type, attack, release) {
+        const now = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        osc.type = type; osc.frequency.setValueAtTime(frequency, now);
+        gainNode.gain.setValueAtTime(0, now);
+        gainNode.gain.linearRampToValueAtTime(0.15, now + attack); 
+        gainNode.gain.setValueAtTime(0.15, now + duration - release);
+        gainNode.gain.linearRampToValueAtTime(0, now + duration);
+        osc.connect(gainNode); gainNode.connect(audioCtx.destination);
+        osc.start(now); osc.stop(now + duration + 0.1); 
+    }
+
+    function scheduleNextBeat() {
+        if(!isMusicPlaying) return;
+        const elapsed = audioCtx.currentTime - musicStartTime;
+        const progress = Math.min(elapsed / MUSIC_TOTAL_DURATION, 1.0);
+        const currentBPM = 60 + (progress * (320 - 60));
+        const secondsPerBeat = 60.0 / currentBPM;
+
+        if (progress < 0.7) {
+            let baseFreq = CHORD_PROGRESSION[seqState.chordIndex][seqState.noteIndex];
+            playEnvelopeNote(baseFreq, secondsPerBeat * 0.8, 'triangle', 0.05, 0.1);
+            seqState.noteIndex = (seqState.noteIndex + 1) % 3;
+        } else {
+            let octave = (seqState.beatCounter % 2 === 0) ? 1 : 2; 
+            if (Math.random() > 0.8) octave = 3;
+            let baseFreq = CHORD_PROGRESSION[seqState.chordIndex][seqState.noteIndex];
+            playEnvelopeNote(baseFreq * octave, secondsPerBeat * 0.3, 'triangle', 0.01, 0.05);
+            seqState.noteIndex = (seqState.noteIndex + 1) % 3;
+        }
+        seqState.beatCounter++;
+        if (seqState.beatCounter % 4 === 0) {
+            seqState.chordIndex = (seqState.chordIndex + 1) % CHORD_PROGRESSION.length;
+            if (progress < 0.7) seqState.noteIndex = 0; 
+        }
+        schedulerTimer = setTimeout(scheduleNextBeat, secondsPerBeat * 1000);
+    }
+
     function playSound(type) {
         const now = audioCtx.currentTime;
         const osc = audioCtx.createOscillator();
@@ -384,8 +341,6 @@
         }
     }
 
-    let starOsc = null; 
-    let starGain = null;
     function startStarSound() {
         if (starOsc) return; 
         starOsc = audioCtx.createOscillator();
@@ -418,6 +373,7 @@
     const rotateMsg = document.getElementById('rotate-msg');
     const elMultBar = document.getElementById('mult-bar-fill');
     const elMultContainer = document.getElementById('mult-bar-container');
+    const uiWarning = document.getElementById('formation-warning');
     
     const slider = document.getElementById('diff-slider');
     const diffVal = document.getElementById('diff-val');
@@ -431,7 +387,6 @@
 
     let scoreMultiplier = 1;
     let lastScoreTime = 0;
-    let lastWaveTime = 0; 
 
     let rawTiltBeta = 0, rawTiltGamma = 0; 
     let baseTiltBeta = 0, baseTiltGamma = 0; 
@@ -447,11 +402,16 @@
     
     let shieldActive = false;
     let invincibilityTimer = 0;
-    
     let boostTimer = 0;
     let boostOriginalVx = 0;
     let boostOriginalVy = 0;
     let spawnTimeout = null; 
+
+    // Director State
+    let directorTimer = 0;
+    let formationMode = 'NONE'; // 'NONE', 'ARROW', 'WALL'
+    let formationTargets = [];
+    let formationStep = 0;
 
     function resize() {
         width = window.innerWidth;
@@ -492,7 +452,6 @@
         });
     }
 
-    // UI State
     uiSplash.style.display = 'flex';
 
     function splashHandler(e) {
@@ -543,7 +502,7 @@
         uiPause.style.display = 'block';
         if(starOsc) starOsc.disconnect();
         if(spawnTimeout) clearTimeout(spawnTimeout);
-        if(musicTimer) clearTimeout(musicTimer);
+        if(schedulerTimer) clearTimeout(schedulerTimer);
         isMusicPlaying = false;
     }
 
@@ -553,7 +512,7 @@
         if(invincibilityTimer > 0 && starOsc) starOsc.connect(starGain);
         spawnManager(); 
         isMusicPlaying = true;
-        musicStep();
+        scheduleNextBeat();
     }
 
     async function initPermsAndStart() {
@@ -605,7 +564,8 @@
         }
         
         lastScoreTime = Date.now();
-        lastWaveTime = Date.now();
+        directorTimer = 0;
+        formationMode = 'NONE';
         
         player.x = width/2; player.y = height/2;
         player.vx = 0; player.vy = 0;
@@ -644,14 +604,14 @@
 
     function spawnManager() {
         if (state !== 'PLAYING') return;
-        
-        let waveTime = Date.now() - lastWaveTime;
-        if (waveTime > CONFIG.waveDuration) {
-            lastWaveTime = Date.now(); 
+        // Pause standard spawning during formation attacks
+        if (formationMode !== 'NONE') {
+            spawnTimeout = setTimeout(spawnManager, 500); 
+            return;
         }
         
-        let waveProgress = waveTime / 1000; 
-        let ramp = waveProgress * 0.0005; 
+        // VERY SLOW ramp
+        let ramp = score * 0.000005; 
         
         if (Math.random() < CONFIG.spawnRate + ramp) spawnEnemy();
         if (Math.random() < 0.06) spawnDiamond(); 
@@ -664,14 +624,12 @@
         let ex, ey, dist;
         let safe = false;
         let attempts = 0;
-        
         while(!safe && attempts < 10) {
             let edge = Math.floor(Math.random() * 4); 
             if(edge === 0) { ex = Math.random() * width; ey = -20; }
             else if(edge === 1) { ex = width + 20; ey = Math.random() * height; }
             else if(edge === 2) { ex = Math.random() * width; ey = height + 20; }
             else { ex = -20; ey = Math.random() * height; }
-            
             dist = Math.hypot(player.x - ex, player.y - ey);
             if (dist > 300) safe = true; 
             attempts++;
@@ -682,7 +640,7 @@
         else speed += Math.log(score + 2000) * 0.2;
         speed = Math.min(8.0, speed);
         
-        enemies.push({ x: ex, y: ey, speed: speed, vx: 0, vy: 0, radius: 6 });
+        enemies.push({ x: ex, y: ey, speed: speed, vx: 0, vy: 0, radius: 6, mode: 'IDLE' });
     }
 
     function spawnDiamond() {
@@ -698,7 +656,6 @@
     function spawnPowerup() {
         let r = Math.random();
         let type = 'SHIELD';
-        
         if (r < 0.35) type = 'SHIELD';
         else if (r < 0.7) type = 'STAR';
         else if (r < 0.9) type = 'HOLE';
@@ -767,7 +724,83 @@
         }
     }
 
+    function triggerFormation() {
+        // Decide type: 0=Arrow, 1=Wall
+        let type = Math.random() < 0.5 ? 'ARROW' : 'WALL';
+        
+        uiWarning.style.display = 'block';
+        setTimeout(() => uiWarning.style.display = 'none', 2000);
+        
+        if (type === 'ARROW') {
+            formationMode = 'ARROW';
+            formationStep = 0; // 0=Gather, 1=Charge, 2=Release
+            
+            // Find 10-12 enemies
+            let squad = enemies.filter(e => e.mode === 'IDLE').slice(0, 12);
+            
+            // If not enough, spawn some
+            while(squad.length < 12) {
+                spawnEnemy();
+                squad.push(enemies[enemies.length-1]);
+            }
+            
+            // Calculate Target Positions (Relative to center of screen usually)
+            // Let's aim them at player initially
+            let targetX = width/2; 
+            let targetY = height/2;
+            
+            // Mark them
+            squad.forEach((e, i) => {
+                e.mode = 'FORMATION';
+                // V Shape offsets
+                let row = Math.floor(i/2);
+                let side = (i%2 === 0) ? -1 : 1;
+                e.offsetX = side * row * 20;
+                e.offsetY = row * -20; 
+            });
+            
+            // Timer to switch phases
+            setTimeout(() => { formationStep = 1; playSound('charge'); }, 2000); // Aim
+            setTimeout(() => { formationStep = 2; playSound('boost'); }, 3000); // Fire
+            setTimeout(() => { 
+                formationMode = 'NONE'; 
+                enemies.forEach(e => { if(e.mode==='FORMATION') e.mode='IDLE'; });
+            }, 5000);
+            
+        } else {
+            // WALL SWEEP
+            formationMode = 'WALL';
+            let side = Math.random() < 0.5 ? 'LEFT' : 'RIGHT';
+            let startX = (side === 'LEFT') ? -20 : width + 20;
+            let velX = (side === 'LEFT') ? 4 : -4;
+            
+            // Spawn 15 enemies in a line
+            for(let i=0; i<15; i++) {
+                let spacing = height / 16;
+                enemies.push({
+                    x: startX,
+                    y: (i+1) * spacing,
+                    speed: 0,
+                    vx: velX,
+                    vy: 0,
+                    radius: 6,
+                    mode: 'WALL_SWEEP'
+                });
+            }
+            
+            setTimeout(() => { formationMode = 'NONE'; }, 6000);
+        }
+    }
+
     function update() {
+        // AI DIRECTOR
+        directorTimer++;
+        // Every ~20 seconds (1200 frames)
+        if (directorTimer > 1200 && formationMode === 'NONE') {
+            triggerFormation();
+            directorTimer = 0;
+        }
+
         let timeSinceScore = Date.now() - lastScoreTime;
         if (timeSinceScore > CONFIG.multiplierResetTime && scoreMultiplier > 1) {
             scoreMultiplier = 1;
@@ -776,13 +809,14 @@
         let pct = Math.max(0, 100 - (timeSinceScore / CONFIG.multiplierResetTime * 100));
         elMultBar.style.width = pct + "%";
         
-        // --- PLAYER PHYSICS ---
+        // --- PLAYER PHYSICS (CUBE LAW) ---
         if (boostTimer > 0) {
             let phase = CONFIG.fireDuration - boostTimer;
             if (phase < 100) {
                 player.vx = Math.cos(player.angle) * CONFIG.maxVelocity;
                 player.vy = Math.sin(player.angle) * CONFIG.maxVelocity;
             } else if (phase < 300) {
+                // Hold
             } else {
                 let t = (phase - 300) / 100; 
                 player.vx = player.vx * (1-t) + boostOriginalVx * t;
@@ -814,14 +848,17 @@
             let forceX = Math.sign(diffX) * Math.pow(Math.abs(diffX), CONFIG.inputExponent);
             let forceY = Math.sign(diffY) * Math.pow(Math.abs(diffY), CONFIG.inputExponent);
 
-            let speed = Math.sqrt(player.vx*player.vx + player.vy*player.vy);
+            let speed = Math.hypot(player.vx, player.vy);
+            let speedRatio = Math.min(speed / CONFIG.maxVelocity, 1.0);
+            let cubeDrag = speedRatio * speedRatio * speedRatio * CONFIG.dragCoefficient;
+            let currentFriction = CONFIG.baseFriction - cubeDrag;
+
+            // Dot Boost
             let vxNorm = (speed > 0.1) ? player.vx / speed : 0;
             let vyNorm = (speed > 0.1) ? player.vy / speed : 0;
-
-            let totalForce = Math.sqrt(forceX*forceX + forceY*forceY);
+            let totalForce = Math.hypot(forceX, forceY);
             let fxNorm = (totalForce > 0) ? (forceX) / totalForce : 0;
             let fyNorm = (totalForce > 0) ? (forceY) / totalForce : 0;
-
             let dot = (vxNorm * (fxNorm * orientationSign)) + (vyNorm * (-fyNorm * orientationSign));
             let turnFactor = 1 - Math.abs(dot); 
             let dynamicAccel = CONFIG.acceleration * (1 + (turnFactor * CONFIG.turnBoost));
@@ -829,14 +866,8 @@
             player.vx += forceX * dynamicAccel * orientationSign; 
             player.vy -= forceY * dynamicAccel * orientationSign; 
 
-            player.vx *= CONFIG.friction;
-            player.vy *= CONFIG.friction;
-
-            if (speed > CONFIG.maxVelocity) {
-                let ratio = CONFIG.maxVelocity / speed;
-                player.vx *= ratio;
-                player.vy *= ratio;
-            }
+            player.vx *= currentFriction;
+            player.vy *= currentFriction;
         }
         
         player.x += player.vx;
@@ -919,23 +950,53 @@
             player.vy += (pdy / pDist) * pf;
         }
 
-        // --- COLLISIONS ---
+        // --- ENEMIES ---
         for (let i = enemies.length - 1; i >= 0; i--) {
             let e = enemies[i];
             
-            if (invincibilityTimer <= 0) {
-                let dx = player.x - e.x;
-                let dy = player.y - e.y;
-                let dist = Math.sqrt(dx*dx + dy*dy);
-                e.vx = (dx / dist) * e.speed;
-                e.vy = (dy / dist) * e.speed;
-            } else {
-                e.vx *= 0.95; e.vy *= 0.95; 
+            // --- FORMATION LOGIC ---
+            if (e.mode === 'IDLE') {
+                // Standard Homing or Drifting
+                if (invincibilityTimer <= 0) {
+                    let dx = player.x - e.x;
+                    let dy = player.y - e.y;
+                    let dist = Math.sqrt(dx*dx + dy*dy);
+                    e.vx = (dx / dist) * e.speed;
+                    e.vy = (dy / dist) * e.speed;
+                } else {
+                    e.vx *= 0.95; e.vy *= 0.95; 
+                }
+            } else if (e.mode === 'FORMATION') {
+                // 0: Gather at top/center
+                if (formationStep === 0) {
+                    let tx = (width/2) + e.offsetX;
+                    let ty = 100 + e.offsetY; // Top center
+                    let dx = tx - e.x;
+                    let dy = ty - e.y;
+                    e.vx = dx * 0.05; // Lerp speed
+                    e.vy = dy * 0.05;
+                } else if (formationStep === 1) {
+                    // 1: Aim at player (Hold pos but rotate velocity vector mentally?)
+                    e.vx = 0; e.vy = 0;
+                } else if (formationStep === 2) {
+                    // 2: Charge
+                    if (e.vx === 0) {
+                        // Calculate shot vector once
+                        let dx = player.x - e.x;
+                        let dy = player.y - e.y;
+                        let dist = Math.hypot(dx, dy);
+                        e.vx = (dx/dist) * 12; // Fast!
+                        e.vy = (dy/dist) * 12;
+                    }
+                }
+            } else if (e.mode === 'WALL_SWEEP') {
+                // Just keep moving in set direction
             }
             
             e.x += e.vx;
             e.y += e.vy;
             
+            // --- COLLISION ---
             let hitDist = (shieldActive || invincibilityTimer > 0) ? CONFIG.shieldRadius : (player.size * CONFIG.hitboxRatio);
             let pDist = Math.hypot(player.x - e.x, player.y - e.y);
 
@@ -958,25 +1019,20 @@
 
         for (let i = diamonds.length - 1; i >= 0; i--) {
             let d = diamonds[i];
-            checkMagnet(d); // MAGNET
-            
+            checkMagnet(d); 
             d.x += d.vx; d.y += d.vy;
             if(d.x < 0 || d.x > width) d.vx *= -1;
             if(d.y < 0 || d.y > height) d.vy *= -1;
 
             let dist = Math.hypot(player.x - d.x, player.y - d.y);
             if (dist < player.size + CONFIG.diamondHitbox) {
-                scorePoints(1); 
-                increaseMultiplier(); 
-                playSound('coin');
-                diamonds.splice(i, 1);
+                scorePoints(1); increaseMultiplier(); playSound('coin'); diamonds.splice(i, 1);
             }
         }
 
         for (let i = powerups.length - 1; i >= 0; i--) {
             let p = powerups[i];
-            checkMagnet(p); // MAGNET
-            
+            checkMagnet(p); 
             let dist = Math.hypot(player.x - p.x, player.y - p.y);
             if (dist < player.size + p.radius) {
                 playSound('powerup');
@@ -1171,7 +1227,7 @@
         });
 
         enemies.forEach(e => {
-            ctx.fillStyle = '#e74c3c';
+            ctx.fillStyle = (e.mode === 'FORMATION') ? '#fff' : '#e74c3c'; // White during formation
             ctx.beginPath();
             ctx.arc(e.x, e.y, e.radius, 0, Math.PI*2);
             ctx.fill();
