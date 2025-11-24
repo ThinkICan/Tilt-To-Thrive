@@ -92,7 +92,6 @@
         
         /* --- SPLASH ART STYLING --- */
         #splash-screen {
-            /* Important fix: make clickable */
             pointer-events: auto; 
             width: 100%;
             height: 100%;
@@ -132,7 +131,7 @@
 <body>
 
     <div id="rotate-msg">
-        <img src="icon.png" style="width: 150px; height: 150px; border-radius: 30px; margin-bottom: 20px; box-shadow: 0 0 30px #00c6ff;">
+        <img src="icon.jpg" style="width: 150px; height: 150px; border-radius: 30px; margin-bottom: 20px; box-shadow: 0 0 30px #00c6ff;">
         <div style="font-size: 50px; color:#00c6ff; margin: 20px;">⟳</div>
         <p style="color:white; font-size: 24px; font-weight:bold;">Rotate to Landscape</p>
     </div>
@@ -150,7 +149,7 @@
         <h2 id="countdown-text" style="font-size: 100px; color: #fff; text-shadow: 0 0 20px #f1c40f; display:none;">3</h2>
 
         <div id="splash-screen">
-            <img id="splash-img" src="splash.png" alt="Tilt to Thrive">
+            <img id="splash-img" src="splash.jpg" alt="Tilt to Thrive">
             <p class="instruction-text" style="color: #bdc3c7; font-size: 18px;">Tap anywhere to begin</p>
             <div id="copyright">© 2025 Steve Elkins</div>
         </div>
@@ -203,7 +202,7 @@
         hitboxRatio: 0.55,
         enemyHitboxRatio: 0.45, 
         diamondHitbox: 15,
-        magnetRadius: 150,      
+        magnetRadius: 50,       // REDUCED to 50 (70% smaller than 150)
         magnetForce: 0.5,       
         
         shieldRadius: 24,       
@@ -220,23 +219,38 @@
         multiplierResetTime: 15000 
     };
 
+    // --- AUDIO ENGINE (Sci-Fi Ambient) ---
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    let starOsc = null; 
-    let starGain = null;
-
+    let masterGain = null;
+    let delayNode = null;
     let isMusicPlaying = false;
-    let musicStartTime = 0;
-    let schedulerTimer;
-    const MUSIC_TOTAL_DURATION = 300; 
-    const C = 261.63, D = 293.66, E = 329.63, F = 349.23, G = 392.00, A = 440.00, B = 493.88;
-    const CHORD_PROGRESSION = [
-        [C, E, G], [G, B, D*2], [A, C*2, E*2], [F, A, C*2]
-    ];
-    let seqState = { chordIndex: 0, noteIndex: 0, beatCounter: 0 };
+    let musicTimer = null;
+
+    // Scale: Dorian Mode (Spacey)
+    const SCALE = [146.83, 174.61, 196.00, 220.00, 261.63, 293.66, 349.23, 392.00]; // D3, F3, G3, A3, C4, D4, F4, G4
+
+    function setupAudio() {
+        if(masterGain) return;
+        masterGain = audioCtx.createGain();
+        masterGain.gain.value = 0.15; // Low Volume Background
+        
+        // Create Delay (Echo)
+        delayNode = audioCtx.createDelay();
+        delayNode.delayTime.value = 0.4; // 400ms echo
+        const feedback = audioCtx.createGain();
+        feedback.gain.value = 0.4;
+        
+        delayNode.connect(feedback);
+        feedback.connect(delayNode);
+        
+        delayNode.connect(masterGain);
+        masterGain.connect(audioCtx.destination);
+    }
 
     function unlockAudio() {
-        if (audioCtx.state === 'suspended') { audioCtx.resume(); }
-        // Silent buffer to wake up audio engine
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        setupAudio();
+        // Silent buffer
         const buffer = audioCtx.createBuffer(1, 1, 22050); 
         const source = audioCtx.createBufferSource(); 
         source.buffer = buffer; 
@@ -244,61 +258,53 @@
         source.start(0); 
     }
 
-    function startSoundtrack() {
-        if(isMusicPlaying) return;
-        isMusicPlaying = true;
-        musicStartTime = audioCtx.currentTime - (MUSIC_TOTAL_DURATION * 0.3); 
-        scheduleNextBeat();
-    }
-
-    function playEnvelopeNote(frequency, duration, type, attack, release) {
+    function playSynthNote(freq) {
+        if(!masterGain) return;
         const now = audioCtx.currentTime;
         const osc = audioCtx.createOscillator();
-        const gainNode = audioCtx.createGain();
+        const noteGain = audioCtx.createGain();
         
-        osc.type = type;
-        osc.frequency.setValueAtTime(frequency, now);
+        osc.type = 'triangle';
+        osc.frequency.value = freq;
         
-        gainNode.gain.setValueAtTime(0, now);
-        gainNode.gain.linearRampToValueAtTime(0.15, now + attack); 
-        gainNode.gain.setValueAtTime(0.15, now + duration - release);
-        gainNode.gain.linearRampToValueAtTime(0, now + duration);
+        // Envelope (Soft Attack, Long Release)
+        noteGain.gain.setValueAtTime(0, now);
+        noteGain.gain.linearRampToValueAtTime(0.3, now + 0.1);
+        noteGain.gain.exponentialRampToValueAtTime(0.001, now + 1.5);
         
-        osc.connect(gainNode);
-        gainNode.connect(audioCtx.destination);
+        osc.connect(noteGain);
+        noteGain.connect(masterGain);
+        noteGain.connect(delayNode); // Send to echo
+        
         osc.start(now);
-        osc.stop(now + duration + 0.1); 
+        osc.stop(now + 1.5);
     }
 
-    function scheduleNextBeat() {
+    function musicStep() {
         if(!isMusicPlaying) return;
-        const elapsed = audioCtx.currentTime - musicStartTime;
-        const progress = Math.min(elapsed / MUSIC_TOTAL_DURATION, 1.0);
         
-        const currentBPM = 60 + (progress * (320 - 60));
-        const secondsPerBeat = 60.0 / currentBPM;
+        // Randomly pick a note from scale
+        let note = SCALE[Math.floor(Math.random() * SCALE.length)];
+        
+        // Random Octave Shift
+        if(Math.random() > 0.7) note *= 2;
+        if(Math.random() > 0.9) note /= 2;
 
-        if (progress < 0.7) {
-            let baseFreq = CHORD_PROGRESSION[seqState.chordIndex][seqState.noteIndex];
-            playEnvelopeNote(baseFreq, secondsPerBeat * 0.8, 'triangle', 0.05, 0.1);
-            seqState.noteIndex = (seqState.noteIndex + 1) % 3;
-        } else {
-            let octave = (seqState.beatCounter % 2 === 0) ? 1 : 2; 
-            if (Math.random() > 0.8) octave = 3;
-            let baseFreq = CHORD_PROGRESSION[seqState.chordIndex][seqState.noteIndex];
-            playEnvelopeNote(baseFreq * octave, secondsPerBeat * 0.3, 'triangle', 0.01, 0.05);
-            seqState.noteIndex = (seqState.noteIndex + 1) % 3;
-        }
+        playSynthNote(note);
 
-        seqState.beatCounter++;
-        if (seqState.beatCounter % 4 === 0) {
-            seqState.chordIndex = (seqState.chordIndex + 1) % CHORD_PROGRESSION.length;
-            if (progress < 0.7) seqState.noteIndex = 0; 
-        }
-
-        schedulerTimer = setTimeout(scheduleNextBeat, secondsPerBeat * 1000);
+        // Random Rhythm (between 200ms and 600ms)
+        let nextTime = 200 + Math.random() * 400;
+        musicTimer = setTimeout(musicStep, nextTime);
     }
 
+    function startSoundtrack() {
+        if(isMusicPlaying) return;
+        setupAudio();
+        isMusicPlaying = true;
+        musicStep();
+    }
+
+    // --- SFX ---
     function playSound(type) {
         const now = audioCtx.currentTime;
         const osc = audioCtx.createOscillator();
@@ -321,9 +327,6 @@
         } else if (type === 'powerup') { 
             osc.type = 'triangle'; osc.frequency.setValueAtTime(300, now); osc.frequency.linearRampToValueAtTime(800, now + 0.3);
             gain.gain.setValueAtTime(0.1, now); gain.gain.linearRampToValueAtTime(0, now + 0.3); osc.start(now); osc.stop(now + 0.3);
-        } else if (type === 'powerdown') { 
-            osc.type = 'sawtooth'; osc.frequency.setValueAtTime(400, now); osc.frequency.linearRampToValueAtTime(100, now + 0.5);
-            gain.gain.setValueAtTime(0.1, now); gain.gain.linearRampToValueAtTime(0, now + 0.5); osc.start(now); osc.stop(now + 0.5);
         } else if (type === 'suck') { 
             osc.type = 'sine'; osc.frequency.setValueAtTime(50, now); osc.frequency.linearRampToValueAtTime(10, now + 0.1);
             gain.gain.setValueAtTime(0.2, now); gain.gain.linearRampToValueAtTime(0, now + 0.1); osc.start(now); osc.stop(now + 0.1);
@@ -338,51 +341,7 @@
         }
     }
 
-    function startStarSound() {
-        if (starOsc) return; 
-        starOsc = audioCtx.createOscillator();
-        starGain = audioCtx.createGain();
-        starOsc.type = 'square';
-        starOsc.frequency.setValueAtTime(150, audioCtx.currentTime);
-        
-        const lfo = audioCtx.createOscillator();
-        lfo.type = 'sine';
-        lfo.frequency.value = 10; 
-        const lfoGain = audioCtx.createGain();
-        lfoGain.gain.value = 500;
-        lfo.connect(lfoGain);
-        lfoGain.connect(starOsc.frequency);
-        lfo.start();
-
-        starOsc.connect(starGain);
-        starGain.connect(audioCtx.destination);
-        starGain.gain.value = 0.05;
-        starOsc.start();
-    }
-
-    function stopStarSound() {
-        if (starOsc) {
-            try { starOsc.stop(); playSound('powerdown'); } catch(e) {}
-            starOsc = null;
-            starGain = null;
-        }
-    }
-
-    // --- SETUP ---
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
-    const uiSplash = document.getElementById('splash-screen');
-    const uiStart = document.getElementById('start-screen');
-    const uiPause = document.getElementById('pause-screen');
-    const uiGameOver = document.getElementById('game-over');
-    const uiCountdown = document.getElementById('countdown-text');
-    const elScore = document.getElementById('score-display');
-    const elCombo = document.getElementById('combo-display');
-    const elLives = document.getElementById('lives-display');
-    const rotateMsg = document.getElementById('rotate-msg');
-    const elMultBar = document.getElementById('mult-bar-fill');
-    const elMultContainer = document.getElementById('mult-bar-container');
-    
+    // --- GAME STATE ---
     const slider = document.getElementById('diff-slider');
     const diffVal = document.getElementById('diff-val');
     let difficultyLevel = 2; 
@@ -411,11 +370,23 @@
     
     let shieldActive = false;
     let invincibilityTimer = 0;
-    
     let boostTimer = 0;
     let boostOriginalVx = 0;
     let boostOriginalVy = 0;
     let spawnTimeout = null; 
+
+    // --- UI ELEMENTS ---
+    const uiSplash = document.getElementById('splash-screen');
+    const uiStart = document.getElementById('start-screen');
+    const uiPause = document.getElementById('pause-screen');
+    const uiGameOver = document.getElementById('game-over');
+    const uiCountdown = document.getElementById('countdown-text');
+    const elScore = document.getElementById('score-display');
+    const elCombo = document.getElementById('combo-display');
+    const elLives = document.getElementById('lives-display');
+    const rotateMsg = document.getElementById('rotate-msg');
+    const elMultBar = document.getElementById('mult-bar-fill');
+    const elMultContainer = document.getElementById('mult-bar-container');
 
     function resize() {
         width = window.innerWidth;
@@ -467,7 +438,7 @@
     });
 
     uiSplash.addEventListener('click', () => {
-        unlockAudio(); // Unlock Audio Ctx on first user interaction
+        unlockAudio();
         uiSplash.style.display = 'none';
         uiStart.style.display = 'block';
         state = 'MENU';
@@ -475,11 +446,13 @@
 
     document.getElementById('start-btn').addEventListener('click', (e) => {
         e.stopPropagation(); 
+        unlockAudio(); 
         initPermsAndStart();
     });
     
     document.getElementById('retry-btn').addEventListener('click', (e) => {
         e.stopPropagation();
+        unlockAudio();
         startCountdownSequence();
     });
 
@@ -502,19 +475,17 @@
     function pauseGame() {
         state = 'PAUSED';
         uiPause.style.display = 'block';
-        if(starOsc) starOsc.disconnect();
         if(spawnTimeout) clearTimeout(spawnTimeout);
-        if(schedulerTimer) clearTimeout(schedulerTimer); 
+        if(musicTimer) clearTimeout(musicTimer);
         isMusicPlaying = false;
     }
 
     function resumeGame() {
         state = 'PLAYING';
         uiPause.style.display = 'none';
-        if(invincibilityTimer > 0 && starOsc) starOsc.connect(starGain);
         spawnManager(); 
         isMusicPlaying = true;
-        scheduleNextBeat();
+        musicStep();
     }
 
     async function initPermsAndStart() {
@@ -572,7 +543,6 @@
         player.vx = 0; player.vy = 0;
         shieldActive = false; invincibilityTimer = 0;
         boostTimer = 0;
-        stopStarSound();
 
         updateHUD();
         state = 'COUNTDOWN';
@@ -659,6 +629,7 @@
     function spawnPowerup() {
         let r = Math.random();
         let type = 'SHIELD';
+        
         if (r < 0.35) type = 'SHIELD';
         else if (r < 0.7) type = 'STAR';
         else if (r < 0.9) type = 'HOLE';
@@ -712,22 +683,16 @@
         updateHUD();
     }
 
-    // --- MAGNETISM HELPER ---
     function checkMagnet(item) {
         let dx = player.x - item.x;
         let dy = player.y - item.y;
         let distSq = dx*dx + dy*dy;
         if (distSq < CONFIG.magnetRadius * CONFIG.magnetRadius) {
             let dist = Math.sqrt(distSq);
-            // Accelerate item towards player
             item.vx = (item.vx || 0) + (dx / dist) * CONFIG.magnetForce;
             item.vy = (item.vy || 0) + (dy / dist) * CONFIG.magnetForce;
-            
-            // Apply drag to item so it doesn't orbit forever
             item.vx *= 0.9;
             item.vy *= 0.9;
-            
-            // Move
             item.x += item.vx;
             item.y += item.vy;
         }
@@ -749,7 +714,6 @@
                 player.vx = Math.cos(player.angle) * CONFIG.maxVelocity;
                 player.vy = Math.sin(player.angle) * CONFIG.maxVelocity;
             } else if (phase < 300) {
-                // Hold
             } else {
                 let t = (phase - 300) / 100; 
                 player.vx = player.vx * (1-t) + boostOriginalVx * t;
@@ -820,11 +784,6 @@
 
         if (invincibilityTimer > 0) {
             invincibilityTimer -= 16;
-            if (invincibilityTimer <= 1000 && starOsc) stopStarSound(); 
-            if (invincibilityTimer <= 0) {
-                invincibilityTimer = 0;
-                stopStarSound();
-            }
         }
 
         // --- FIRE TRAILS ---
@@ -950,7 +909,6 @@
                 if(p.type === 'SHIELD') shieldActive = true;
                 if(p.type === 'STAR') {
                     invincibilityTimer = CONFIG.invincibilityTime;
-                    startStarSound(); 
                 }
                 if(p.type === 'HOLE') spawnBlackHole(p.x, p.y);
                 if(p.type === 'FIRE') activateFireBooster();
@@ -981,7 +939,6 @@
         lives--;
         scoreMultiplier = 1; 
         combo = 1;
-        stopStarSound();
         updateHUD();
         createExplosion(player.x, player.y, '#ecf0f1', 50);
         playSound('crash');
@@ -1088,6 +1045,7 @@
                 ctx.beginPath();
                 ctx.arc(bh.x, bh.y, 15, 0, Math.PI*2);
                 ctx.fill();
+                
                 ctx.strokeStyle = '#9b59b6';
                 ctx.lineWidth = 2;
                 for(let i=0; i<5; i++) {
