@@ -45,7 +45,7 @@
         }
         
         #combo-display { 
-            color: #afffff; /* Changed to Bluish White to match diamonds */
+            color: #afffff; 
             font-size: 22px; 
             text-shadow: 0 0 10px rgba(175, 255, 255, 0.8); 
             transition: transform 0.1s; 
@@ -196,7 +196,7 @@
             <p class="instruction-text" style="margin-bottom: 20px;">
                 Avoid the Red Dots<br>
                 Collect White Diamonds<br>
-                Grab Golden Powerups
+                Grab Powerups
             </p>
             
             <div class="slider-container" style="margin: 0 auto 20px auto;">
@@ -299,7 +299,6 @@
         const gainNode = audioCtx.createGain();
         osc.type = type; osc.frequency.setValueAtTime(frequency, now);
         gainNode.gain.setValueAtTime(0, now);
-        // Ultra Low Volume
         gainNode.gain.linearRampToValueAtTime(0.02, now + attack); 
         gainNode.gain.setValueAtTime(0.02, now + duration - release);
         gainNode.gain.linearRampToValueAtTime(0, now + duration);
@@ -652,16 +651,27 @@
 
     function spawnManager() {
         if (state !== 'PLAYING') return;
-        if (formationMode !== 'NONE') {
-            spawnTimeout = setTimeout(spawnManager, 500); 
-            return;
+        
+        let waveTime = Date.now() - lastWaveTime;
+        if (waveTime > CONFIG.waveDuration) {
+            lastWaveTime = Date.now(); 
+        }
+        
+        // Mercy Logic: Force Spawn Powerups if crowded
+        let currentPowerups = powerups.length;
+        let enemyCount = enemies.length;
+        
+        if (enemyCount > 12 && currentPowerups === 0) {
+             spawnPowerup();
+        } else if (currentPowerups < 3) {
+             // Increased spawn rate (0.04)
+             if (Math.random() < 0.04) spawnPowerup();
         }
         
         let ramp = score * 0.000005; 
         
         if (Math.random() < CONFIG.spawnRate + ramp) spawnEnemy();
         if (Math.random() < 0.06) spawnDiamond(); 
-        if (Math.random() < 0.016) spawnPowerup(); 
         
         spawnTimeout = setTimeout(spawnManager, 100); 
     }
@@ -695,7 +705,7 @@
             y: Math.random() * (height-40) + 20, 
             vx: (Math.random() - 0.5) * 0.5, 
             vy: (Math.random() - 0.5) * 0.5,
-            radius: 5.5 // VISUALLY SMALLER
+            radius: 5.5 
         });
     }
 
@@ -736,22 +746,34 @@
         invincibilityTimer = CONFIG.fireDuration + 200; 
     }
 
-    function activateDiamondBomb() {
+    function activateDiamondBomb(x, y) {
         playSound('dbomb');
+        // No Delay for chain reaction or direct hit
+        // If called from player pickup, x/y are player coords
+        // If called from Ion, x/y are powerup coords
         setTimeout(() => {
-            for(let i=0; i<25; i++) {
-                let angle = (Math.PI * 2 / 25) * i;
-                let speed = 12 + Math.random() * 4;
-                diamonds.push({
-                    x: player.x, y: player.y,
-                    vx: Math.cos(angle) * speed,
-                    vy: Math.sin(angle) * speed,
-                    radius: 5.5, // Match normal diamond size
-                    isProjectile: true,
-                    projectileTimer: 60 
-                });
-            }
+             spawnDiamondBurst(x, y, 25, 12);
         }, 250);
+    }
+
+    function activateSuperDiamondBomb(x, y) {
+        playSound('dbomb'); // Louder?
+        spawnDiamondBurst(x, y, 100, 20);
+    }
+
+    function spawnDiamondBurst(x, y, count, speedBase) {
+        for(let i=0; i<count; i++) {
+            let angle = (Math.PI * 2 / count) * i;
+            let speed = speedBase + Math.random() * 4;
+            diamonds.push({
+                x: x, y: y,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                radius: 7.5,
+                isProjectile: true,
+                projectileTimer: 60 
+            });
+        }
     }
 
     function triggerIonBlast() {
@@ -763,12 +785,12 @@
         playSound('ion');
         let vx = Math.cos(player.angle);
         let vy = Math.sin(player.angle);
-        // Dual Blast (Front and Back)
         ionBlasts.push({
             x: player.x, y: player.y,
             vx: vx * CONFIG.ionSpeed, vy: vy * CONFIG.ionSpeed,
             radius: 10, maxRadius: CONFIG.ionMaxRadius
         });
+        // Backward blast
         ionBlasts.push({
             x: player.x, y: player.y,
             vx: -vx * CONFIG.ionSpeed, vy: -vy * CONFIG.ionSpeed,
@@ -893,7 +915,7 @@
                     vy: (Math.random()-0.5)*0.5
                 });
             }
-            // Forward Fire Cone
+            // Forward Fire
             if (phase > 300) {
                  let ang = player.angle + (Math.random()-0.5)*0.5;
                  fireTrails.push({
@@ -971,10 +993,24 @@
             ion.y += ion.vy;
             ion.radius += CONFIG.ionGrowth;
             if (ion.radius > ion.maxRadius) { ionBlasts.splice(i, 1); continue; }
+            
+            // Enemy Check
             for (let j = enemies.length - 1; j >= 0; j--) {
                 let e = enemies[j];
                 if (Math.hypot(ion.x - e.x, ion.y - e.y) < ion.radius + e.radius) {
                     enemies.splice(j, 1); scorePoints(10); createExplosion(e.x, e.y, '#00ffff');
+                }
+            }
+            
+            // --- NEW: Powerup Check (Chain Reaction) ---
+            for (let k = powerups.length - 1; k >= 0; k--) {
+                let p = powerups[k];
+                if (p.type === 'DIAMOND_BOMB') {
+                    if (Math.hypot(ion.x - p.x, ion.y - p.y) < ion.radius + p.radius) {
+                        powerups.splice(k, 1);
+                        activateSuperDiamondBomb(p.x, p.y);
+                        createExplosion(p.x, p.y, '#fff', 20);
+                    }
                 }
             }
         }
@@ -1076,9 +1112,6 @@
             e.x += e.vx;
             e.y += e.vy;
             
-            // GHOSTING
-            if (e.mode === 'FORMATION' && formationStep < 2) continue;
-
             let hitDist = (shieldActive || invincibilityTimer > 0) ? CONFIG.shieldRadius : (player.size * CONFIG.hitboxRatio);
             let pDist = Math.hypot(player.x - e.x, player.y - e.y);
 
@@ -1092,7 +1125,7 @@
                     shieldActive = false;
                     createExplosion(player.x, player.y, '#3498db');
                     playSound('crash');
-                    destroyEnemiesInRange(100); // Reduced blast radius (Nerf)
+                    destroyEnemiesInRange(150);
                 } else {
                     killPlayer();
                 }
@@ -1104,17 +1137,12 @@
             checkMagnet(d); 
             
             if (d.isProjectile) {
-                 d.vx *= 0.92; d.vy *= 0.92; // HEAVY DRAG
+                 d.vx *= 0.92; d.vy *= 0.92; 
                  d.projectileTimer--; 
                  
                  let speed = Math.hypot(d.vx, d.vy);
-                 // IF SLOW -> Convert to Collectible drift
-                 if(speed < 3.0 || d.projectileTimer < 0) {
-                     d.isProjectile = false;
-                     // Brake to drift speed
-                     d.vx *= 0.2; 
-                     d.vy *= 0.2;
-                 } else {
+                 if(speed < 4.0) d.isProjectile = false;
+                 else {
                      for (let j = enemies.length - 1; j >= 0; j--) {
                         let e = enemies[j];
                         if (Math.hypot(d.x - e.x, d.y - e.y) < 120) { 
@@ -1130,7 +1158,6 @@
                 if(d.y < 0 || d.y > height) d.vy *= -1;
             } else {
                 d.x += d.vx; d.y += d.vy;
-                // Projectiles bounce and lose energy
                 if(d.x < 0 || d.x > width) { d.vx *= -1; d.isProjectile = false; }
                 if(d.y < 0 || d.y > height) { d.vy *= -1; d.isProjectile = false; }
             }
@@ -1160,7 +1187,7 @@
                 if(p.type === 'HOLE') spawnBlackHole(p.x, p.y);
                 if(p.type === 'FIRE') activateFireBooster();
                 if(p.type === 'ION') triggerIonBlast();
-                if(p.type === 'DIAMOND_BOMB') activateDiamondBomb();
+                if(p.type === 'DIAMOND_BOMB') activateDiamondBomb(player.x, player.y);
                 powerups.splice(i, 1);
             }
         }
@@ -1371,7 +1398,6 @@
         });
 
         enemies.forEach(e => {
-            // Red when launching, White/Ghost when forming
             let isForming = (e.mode === 'FORMATION' && formationStep < 2);
             ctx.globalAlpha = isForming ? 0.5 : 1.0;
             ctx.fillStyle = isForming ? '#fff' : '#e74c3c'; 
