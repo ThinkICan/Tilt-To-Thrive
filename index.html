@@ -45,9 +45,9 @@
         }
         
         #combo-display { 
-            color: #f1c40f; 
+            color: #afffff; /* Changed to Bluish White to match diamonds */
             font-size: 22px; 
-            text-shadow: 0 0 10px rgba(241, 196, 15, 0.8); 
+            text-shadow: 0 0 10px rgba(175, 255, 255, 0.8); 
             transition: transform 0.1s; 
         }
         .pulse { transform: scale(1.5); }
@@ -195,7 +195,7 @@
             <h2 style="margin:0 0 15px 0; color:#2ecc71; display:block;">MISSION</h2>
             <p class="instruction-text" style="margin-bottom: 20px;">
                 Avoid the Red Dots<br>
-                Collect Yellow Diamonds<br>
+                Collect White Diamonds<br>
                 Grab Golden Powerups
             </p>
             
@@ -205,7 +205,8 @@
                 <span id="diff-val" class="diff-label">EASY</span>
             </div>
             
-            <p style="font-size: 12px; color: #5da878;">(Hold comfortable. Auto-calibrates on GO)</p>
+            <p style="font-size:12px; color:#5da878; margin-top:10px;">(Best played looking down from above)</p>
+
             <button id="start-btn">LAUNCH</button>
         </div>
 
@@ -298,6 +299,7 @@
         const gainNode = audioCtx.createGain();
         osc.type = type; osc.frequency.setValueAtTime(frequency, now);
         gainNode.gain.setValueAtTime(0, now);
+        // Ultra Low Volume
         gainNode.gain.linearRampToValueAtTime(0.02, now + attack); 
         gainNode.gain.setValueAtTime(0.02, now + duration - release);
         gainNode.gain.linearRampToValueAtTime(0, now + duration);
@@ -502,7 +504,6 @@
         uiSplash.style.display = 'none';
         uiStart.style.display = 'block';
         state = 'MENU';
-        // Reset UI
         diffVal.innerText = "EASY";
         slider.value = 1;
     }
@@ -587,7 +588,6 @@
             uiCountdown.innerText = "GO!";
             playSound('go');
             
-            // Calibration at GO
             baseTiltGamma = rawTiltGamma;
             baseTiltBeta = rawTiltBeta;
 
@@ -695,7 +695,7 @@
             y: Math.random() * (height-40) + 20, 
             vx: (Math.random() - 0.5) * 0.5, 
             vy: (Math.random() - 0.5) * 0.5,
-            radius: 7.5 
+            radius: 5.5 // VISUALLY SMALLER
         });
     }
 
@@ -746,9 +746,9 @@
                     x: player.x, y: player.y,
                     vx: Math.cos(angle) * speed,
                     vy: Math.sin(angle) * speed,
-                    radius: 7.5,
+                    radius: 5.5, // Match normal diamond size
                     isProjectile: true,
-                    projectileTimer: 60 // 1 second immunity
+                    projectileTimer: 60 
                 });
             }
         }, 250);
@@ -763,9 +763,15 @@
         playSound('ion');
         let vx = Math.cos(player.angle);
         let vy = Math.sin(player.angle);
+        // Dual Blast (Front and Back)
         ionBlasts.push({
             x: player.x, y: player.y,
             vx: vx * CONFIG.ionSpeed, vy: vy * CONFIG.ionSpeed,
+            radius: 10, maxRadius: CONFIG.ionMaxRadius
+        });
+        ionBlasts.push({
+            x: player.x, y: player.y,
+            vx: -vx * CONFIG.ionSpeed, vy: -vy * CONFIG.ionSpeed,
             radius: 10, maxRadius: CONFIG.ionMaxRadius
         });
     }
@@ -1086,7 +1092,7 @@
                     shieldActive = false;
                     createExplosion(player.x, player.y, '#3498db');
                     playSound('crash');
-                    destroyEnemiesInRange(150);
+                    destroyEnemiesInRange(100); // Reduced blast radius (Nerf)
                 } else {
                     killPlayer();
                 }
@@ -1101,14 +1107,14 @@
                  d.vx *= 0.92; d.vy *= 0.92; // HEAVY DRAG
                  d.projectileTimer--; 
                  
-                 // Wall bounce or energy loss
-                 if(d.x < 0 || d.x > width) { d.vx *= -1; d.isProjectile = false; }
-                 if(d.y < 0 || d.y > height) { d.vy *= -1; d.isProjectile = false; }
-
-                 // Conversion logic
                  let speed = Math.hypot(d.vx, d.vy);
-                 if(speed < 2.0 || d.projectileTimer < 0) d.isProjectile = false;
-                 else {
+                 // IF SLOW -> Convert to Collectible drift
+                 if(speed < 3.0 || d.projectileTimer < 0) {
+                     d.isProjectile = false;
+                     // Brake to drift speed
+                     d.vx *= 0.2; 
+                     d.vy *= 0.2;
+                 } else {
                      for (let j = enemies.length - 1; j >= 0; j--) {
                         let e = enemies[j];
                         if (Math.hypot(d.x - e.x, d.y - e.y) < 120) { 
@@ -1124,6 +1130,9 @@
                 if(d.y < 0 || d.y > height) d.vy *= -1;
             } else {
                 d.x += d.vx; d.y += d.vy;
+                // Projectiles bounce and lose energy
+                if(d.x < 0 || d.x > width) { d.vx *= -1; d.isProjectile = false; }
+                if(d.y < 0 || d.y > height) { d.vy *= -1; d.isProjectile = false; }
             }
 
             if (!d.isProjectile) {
@@ -1317,13 +1326,14 @@
         });
 
         diamonds.forEach(d => {
-            ctx.fillStyle = '#f1c40f';
+            ctx.fillStyle = '#afffff'; /* WHITE DIAMONDS */
             ctx.beginPath();
             ctx.moveTo(d.x, d.y - d.radius);
             ctx.lineTo(d.x + d.radius, d.y);
             ctx.lineTo(d.x, d.y + d.radius);
             ctx.lineTo(d.x - d.radius, d.y);
             ctx.fill();
+            
             ctx.strokeStyle = 'white'; ctx.lineWidth = 1.5; ctx.stroke();
             if(Math.random() < 0.05) {
                 ctx.fillStyle = 'white';
@@ -1334,7 +1344,7 @@
         powerups.forEach(p => {
             ctx.beginPath();
             if (p.type === 'DIAMOND_BOMB') {
-                 ctx.fillStyle = '#e67e22'; 
+                 ctx.fillStyle = '#afffff'; 
                  ctx.moveTo(p.x, p.y - p.radius);
                  ctx.lineTo(p.x + p.radius, p.y);
                  ctx.lineTo(p.x, p.y + p.radius);
@@ -1361,9 +1371,11 @@
         });
 
         enemies.forEach(e => {
-            // Ghost if forming
-            ctx.globalAlpha = (e.mode === 'FORMATION' && formationStep < 2) ? 0.5 : 1.0;
-            ctx.fillStyle = (e.mode === 'FORMATION') ? '#fff' : '#e74c3c'; 
+            // Red when launching, White/Ghost when forming
+            let isForming = (e.mode === 'FORMATION' && formationStep < 2);
+            ctx.globalAlpha = isForming ? 0.5 : 1.0;
+            ctx.fillStyle = isForming ? '#fff' : '#e74c3c'; 
+            
             ctx.beginPath();
             ctx.arc(e.x, e.y, e.radius, 0, Math.PI*2);
             ctx.fill();
