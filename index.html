@@ -88,7 +88,7 @@
             max-width: 80%;
         }
 
-        #start-screen, #game-over, #pause-screen { display: none; }
+        #start-screen, #game-over, #pause-screen, #level-screen { display: none; }
         
         /* --- SPLASH ART STYLING --- */
         #splash-screen {
@@ -146,6 +146,7 @@
         /* Copyright Footer */
         #copyright { margin-top: 5px; color: rgba(255,255,255,0.5); font-size: 12px; font-family: sans-serif; }
         
+        /* Warnings */
         #formation-warning {
             display: none;
             position: absolute;
@@ -160,6 +161,36 @@
             animation: flash 0.5s infinite;
         }
         @keyframes flash { 0% {opacity:0;} 50% {opacity:1;} 100% {opacity:0;} }
+
+        /* Bubble Level UI */
+        #level-bubble-container {
+            position: relative;
+            width: 200px;
+            height: 200px;
+            border: 4px solid #fff;
+            border-radius: 50%;
+            background: rgba(0,0,0,0.5);
+            margin: 0 auto 20px auto;
+        }
+        #level-center {
+            position: absolute;
+            top: 50%; left: 50%;
+            width: 40px; height: 40px;
+            background: rgba(46, 204, 113, 0.3);
+            border: 2px solid #2ecc71;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+        #level-dot {
+            position: absolute;
+            top: 50%; left: 50%;
+            width: 30px; height: 30px;
+            background: #e74c3c;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            transition: background 0.2s;
+            box-shadow: 0 0 10px currentColor;
+        }
     </style>
 </head>
 <body>
@@ -198,14 +229,21 @@
                 Collect Yellow Diamonds<br>
                 Grab Golden Powerups
             </p>
-            
             <div class="slider-container" style="margin: 0 auto 20px auto;">
                 <label for="diff-slider" style="color:white; font-family:sans-serif;">Difficulty</label>
                 <input type="range" min="1" max="3" value="2" id="diff-slider">
                 <span id="diff-val" class="diff-label">NORMAL</span>
             </div>
-
             <button id="start-btn">LAUNCH</button>
+        </div>
+
+        <div id="level-screen" class="screen-box">
+            <h2 style="color:white;">CALIBRATION</h2>
+            <div id="level-bubble-container">
+                <div id="level-center"></div>
+                <div id="level-dot"></div>
+            </div>
+            <p style="color: #bdc3c7;">Tilt phone to center the bubble.</p>
         </div>
 
         <div id="pause-screen" class="screen-box">
@@ -255,8 +293,8 @@
         
         ionDelay: 1000,         
         ionSpeed: 14,           
-        ionGrowth: 0.8,         // Faster growth
-        ionMaxRadius: 200,      // Wider destruction
+        ionGrowth: 0.8,         
+        ionMaxRadius: 250,      // Bigger Boom
         
         multiplierResetTime: 15000 
     };
@@ -286,6 +324,8 @@
     function startSoundtrack() {
         if(isMusicPlaying) return;
         isMusicPlaying = true;
+        // Reset sequence
+        seqState = { chordIndex: 0, noteIndex: 0, beatCounter: 0 };
         musicStartTime = audioCtx.currentTime - (MUSIC_TOTAL_DURATION * 0.3); 
         scheduleNextBeat();
     }
@@ -296,7 +336,6 @@
         const gainNode = audioCtx.createGain();
         osc.type = type; osc.frequency.setValueAtTime(frequency, now);
         gainNode.gain.setValueAtTime(0, now);
-        // VERY LOW VOLUME for music
         gainNode.gain.linearRampToValueAtTime(0.02, now + attack); 
         gainNode.gain.setValueAtTime(0.02, now + duration - release);
         gainNode.gain.linearRampToValueAtTime(0, now + duration);
@@ -372,6 +411,10 @@
                 osc.type = 'square'; osc.frequency.setValueAtTime(800, now); osc.frequency.exponentialRampToValueAtTime(200, now + 0.5);
                 gain.gain.setValueAtTime(0.2, now); gain.gain.linearRampToValueAtTime(0, now + 0.5);
                 osc.start(now); osc.stop(now+0.5);
+            } else if (type === 'dbomb') { // Diamond Bomb
+                osc.type = 'triangle'; osc.frequency.setValueAtTime(600, now); osc.frequency.exponentialRampToValueAtTime(1200, now + 0.3);
+                gain.gain.setValueAtTime(0.3, now); gain.gain.linearRampToValueAtTime(0, now + 0.3);
+                osc.start(now); osc.stop(now+0.3);
             }
         } catch(e) {}
     }
@@ -401,6 +444,7 @@
     const uiStart = document.getElementById('start-screen');
     const uiPause = document.getElementById('pause-screen');
     const uiGameOver = document.getElementById('game-over');
+    const uiLevel = document.getElementById('level-screen');
     const uiCountdown = document.getElementById('countdown-text');
     const elScore = document.getElementById('score-display');
     const elCombo = document.getElementById('combo-display');
@@ -409,6 +453,7 @@
     const elMultBar = document.getElementById('mult-bar-fill');
     const elMultContainer = document.getElementById('mult-bar-container');
     const uiWarning = document.getElementById('formation-warning');
+    const levelDot = document.getElementById('level-dot');
     
     const slider = document.getElementById('diff-slider');
     const diffVal = document.getElementById('diff-val');
@@ -448,6 +493,9 @@
     let directorTimer = 0;
     let formationMode = 'NONE'; 
     let formationStep = 0;
+    
+    // Leveling loop
+    let levelRaf = null;
 
     function resize() {
         width = window.innerWidth;
@@ -462,11 +510,17 @@
             angle = window.orientation;
         }
 
-        // CSS handles rotation message
-        if (height > width && state === 'PLAYING') pauseGame();
-        
-        if (angle === -90 || angle === 270) orientationSign = -1;
-        else orientationSign = 1;
+        if (height > width) {
+            rotateMsg.style.display = 'flex';
+            if(state === 'PLAYING') pauseGame();
+        } else {
+            rotateMsg.style.display = 'none';
+            if (angle === -90 || angle === 270) {
+                orientationSign = -1;
+            } else {
+                orientationSign = 1;
+            }
+        }
     }
     window.addEventListener('resize', resize);
     window.addEventListener('orientationchange', () => { setTimeout(resize, 200); });
@@ -490,7 +544,6 @@
         uiSplash.style.display = 'none';
         uiStart.style.display = 'block';
         state = 'MENU';
-        startSoundtrack(); 
     }
     uiSplash.addEventListener('click', splashHandler);
     uiSplash.addEventListener('touchstart', splashHandler);
@@ -550,11 +603,11 @@
         if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
             try {
                 const perm = await DeviceOrientationEvent.requestPermission();
-                if (perm === 'granted') startCountdownSequence();
+                if (perm === 'granted') checkLevelAndStart();
                 else alert('Permission denied');
             } catch (e) { console.error(e); }
         } else {
-            startCountdownSequence();
+            checkLevelAndStart();
         }
     }
 
@@ -562,6 +615,50 @@
         if(e.gamma !== null) rawTiltGamma = e.gamma; 
         if(e.beta !== null) rawTiltBeta = e.beta;
     });
+
+    function checkLevelAndStart() {
+        // Check if phone is too tilted (>15 deg)
+        // Beta (front/back), Gamma (Left/Right)
+        if (Math.abs(rawTiltBeta) > 15 || Math.abs(rawTiltGamma) > 15) {
+            uiStart.style.display = 'none';
+            uiLevel.style.display = 'block';
+            runLevelLoop();
+        } else {
+            startCountdownSequence();
+        }
+    }
+
+    function runLevelLoop() {
+        // Visualize bubble
+        // Map -45..45 to -100..100 px
+        let bx = Math.max(-45, Math.min(45, rawTiltGamma)) * 2;
+        let by = Math.max(-45, Math.min(45, rawTiltBeta)) * 2;
+        
+        // In Landscape, swap/invert visual axes to match bubble level intuition
+        // This is purely visual mapping
+        if(orientationSign === 1) {
+             // Normal Landscape
+             levelDot.style.transform = `translate(calc(-50% + ${by}px), calc(-50% + ${bx}px))`;
+        } else {
+             // Flipped
+             levelDot.style.transform = `translate(calc(-50% - ${by}px), calc(-50% - ${bx}px))`;
+        }
+
+        let dist = Math.sqrt(rawTiltBeta*rawTiltBeta + rawTiltGamma*rawTiltGamma);
+        
+        if (dist < 10) {
+            // Good enough
+            levelDot.style.background = '#2ecc71'; // Green
+            setTimeout(() => {
+                cancelAnimationFrame(levelRaf);
+                uiLevel.style.display = 'none';
+                startCountdownSequence();
+            }, 500);
+        } else {
+             levelDot.style.background = '#e74c3c'; // Red
+             levelRaf = requestAnimationFrame(runLevelLoop);
+        }
+    }
 
     function nextCountdownStep(count) {
         const uiCountdown = document.getElementById('countdown-text');
@@ -589,6 +686,7 @@
         uiStart.style.display = 'none';
         uiGameOver.style.display = 'none';
         uiPause.style.display = 'none';
+        uiLevel.style.display = 'none';
         uiCountdown.style.display = 'block';
         
         if(spawnTimeout) clearTimeout(spawnTimeout);
@@ -687,17 +785,19 @@
     function spawnPowerup() {
         let r = Math.random();
         let type = 'SHIELD';
+        // 30% Shield, 30% Star, 10% Hole, 10% Fire, 10% Ion, 10% D-Bomb
         if (r < 0.30) type = 'SHIELD';
         else if (r < 0.60) type = 'STAR';
-        else if (r < 0.75) type = 'HOLE';
-        else if (r < 0.85) type = 'FIRE';
-        else type = 'ION';
+        else if (r < 0.70) type = 'HOLE';
+        else if (r < 0.80) type = 'FIRE';
+        else if (r < 0.90) type = 'ION';
+        else type = 'DIAMOND_BOMB';
 
         powerups.push({ 
             x: Math.random() * (width-40) + 20, 
             y: Math.random() * (height-40) + 20, 
             type: type,
-            radius: 9 
+            radius: (type==='DIAMOND_BOMB') ? 12 : 9 
         });
     }
 
@@ -718,6 +818,24 @@
         boostOriginalVy = player.vy;
         boostTimer = CONFIG.fireDuration; 
         invincibilityTimer = CONFIG.fireDuration + 200; 
+    }
+
+    function activateDiamondBomb() {
+        playSound('dbomb');
+        setTimeout(() => {
+            // Explode 25 diamonds
+            for(let i=0; i<25; i++) {
+                let angle = (Math.PI * 2 / 25) * i;
+                let speed = 6 + Math.random() * 4;
+                diamonds.push({
+                    x: player.x, y: player.y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    radius: 7.5,
+                    isProjectile: true // Special flag
+                });
+            }
+        }, 250);
     }
 
     function triggerIonBlast() {
@@ -788,7 +906,8 @@
                 e.mode = 'FORMATION';
                 let row = Math.floor(i/2);
                 let side = (i%2 === 0) ? -1 : 1;
-                e.offsetX = side * row * 20; e.offsetY = row * -20; 
+                e.offsetX = side * row * 10; // 50% more compact (was 20)
+                e.offsetY = row * -10; 
             });
             setTimeout(() => { formationStep = 1; playSound('charge'); }, 2000); 
             setTimeout(() => { formationStep = 2; playSound('boost'); }, 3000); 
@@ -863,7 +982,6 @@
             let forceX = Math.sign(diffX) * Math.pow(Math.abs(diffX), CONFIG.inputExponent);
             let forceY = Math.sign(diffY) * Math.pow(Math.abs(diffY), CONFIG.inputExponent);
 
-            // Dot Boost
             let speed = Math.sqrt(player.vx*player.vx + player.vy*player.vy);
             let vxNorm = (speed > 0.1) ? player.vx / speed : 0;
             let vyNorm = (speed > 0.1) ? player.vy / speed : 0;
@@ -1015,13 +1133,14 @@
                         e.vy = (dy/dist) * 12;
                     }
                 }
-            } else if (e.mode === 'WALL_SWEEP') {
-                // Keep going
             }
             
             e.x += e.vx;
             e.y += e.vy;
             
+            // GHOSTING: If forming, no collisions
+            if (e.mode === 'FORMATION' && formationStep < 2) continue;
+
             let hitDist = (shieldActive || invincibilityTimer > 0) ? CONFIG.shieldRadius : (player.size * CONFIG.hitboxRatio);
             let pDist = Math.hypot(player.x - e.x, player.y - e.y);
 
@@ -1048,6 +1167,16 @@
             d.x += d.vx; d.y += d.vy;
             if(d.x < 0 || d.x > width) d.vx *= -1;
             if(d.y < 0 || d.y > height) d.vy *= -1;
+            
+            // PROJECTILE DIAMONDS KILL
+            if (d.isProjectile) {
+                 for (let j = enemies.length - 1; j >= 0; j--) {
+                    let e = enemies[j];
+                    if (Math.hypot(d.x - e.x, d.y - e.y) < 7.5 + e.radius) {
+                        enemies.splice(j, 1); scorePoints(10); createExplosion(e.x, e.y, '#f1c40f');
+                    }
+                 }
+            }
 
             let dist = Math.hypot(player.x - d.x, player.y - d.y);
             if (dist < player.size + CONFIG.diamondHitbox) {
@@ -1072,6 +1201,7 @@
                 if(p.type === 'HOLE') spawnBlackHole(p.x, p.y);
                 if(p.type === 'FIRE') activateFireBooster();
                 if(p.type === 'ION') triggerIonBlast();
+                if(p.type === 'DIAMOND_BOMB') activateDiamondBomb();
                 powerups.splice(i, 1);
             }
         }
@@ -1185,9 +1315,11 @@
 
             ctx.save();
             ctx.translate(f.x, f.y);
-            ctx.rotate(f.angle + (Date.now()/200)); 
+            // Use arc for round balls
             let oscSize = f.size * (0.8 + Math.sin(Date.now()/50)*0.2); 
-            ctx.fillRect(-oscSize/2, -oscSize/2, oscSize, oscSize);
+            ctx.beginPath();
+            ctx.arc(0, 0, oscSize/2, 0, Math.PI*2);
+            ctx.fill();
             ctx.restore();
         });
 
@@ -1206,6 +1338,7 @@
                 ctx.beginPath();
                 ctx.arc(bh.x, bh.y, 15, 0, Math.PI*2);
                 ctx.fill();
+                
                 ctx.strokeStyle = '#9b59b6';
                 ctx.lineWidth = 2;
                 for(let i=0; i<5; i++) {
@@ -1250,29 +1383,47 @@
 
         powerups.forEach(p => {
             ctx.beginPath();
-            ctx.arc(p.x, p.y, p.radius, 0, Math.PI*2);
-            if(p.type === 'SHIELD') {
-                ctx.fillStyle = '#3498db';
-                ctx.fill(); ctx.strokeStyle = 'white'; ctx.lineWidth = 2; ctx.stroke();
-                ctx.fillStyle = 'white'; ctx.font = '8px Arial'; ctx.fillText("S", p.x-2, p.y+3);
-            } else if (p.type === 'STAR') {
-                ctx.fillStyle = '#f39c12';
-                ctx.fill(); ctx.fillStyle = 'white'; ctx.font = '8px Arial'; ctx.fillText("★", p.x-3, p.y+3);
-            } else if (p.type === 'HOLE') {
-                ctx.fillStyle = '#2c3e50'; ctx.fill(); ctx.strokeStyle = '#8e44ad'; ctx.lineWidth = 3; ctx.stroke();
-            } else if (p.type === 'FIRE') {
-                ctx.fillStyle = '#e67e22'; ctx.fill(); ctx.strokeStyle = '#f1c40f'; ctx.lineWidth = 2; ctx.stroke();
-            } else if (p.type === 'ION') {
-                ctx.fillStyle = '#00ffff'; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+            if (p.type === 'DIAMOND_BOMB') {
+                // Diamond shape for bomb
+                 ctx.fillStyle = '#e67e22'; // Orange tint? Or Gold?
+                 ctx.moveTo(p.x, p.y - p.radius);
+                 ctx.lineTo(p.x + p.radius, p.y);
+                 ctx.lineTo(p.x, p.y + p.radius);
+                 ctx.lineTo(p.x - p.radius, p.y);
+                 ctx.fill();
+                 // Bulge Effect
+                 ctx.strokeStyle = '#fff';
+                 ctx.lineWidth = 2;
+                 ctx.stroke();
+            } else {
+                // Circle for others
+                ctx.arc(p.x, p.y, p.radius, 0, Math.PI*2);
+                if(p.type === 'SHIELD') {
+                    ctx.fillStyle = '#3498db';
+                    ctx.fill(); ctx.strokeStyle = 'white'; ctx.lineWidth = 2; ctx.stroke();
+                    ctx.fillStyle = 'white'; ctx.font = '8px Arial'; ctx.fillText("S", p.x-2, p.y+3);
+                } else if (p.type === 'STAR') {
+                    ctx.fillStyle = '#f39c12';
+                    ctx.fill(); ctx.fillStyle = 'white'; ctx.font = '8px Arial'; ctx.fillText("★", p.x-3, p.y+3);
+                } else if (p.type === 'HOLE') {
+                    ctx.fillStyle = '#2c3e50'; ctx.fill(); ctx.strokeStyle = '#8e44ad'; ctx.lineWidth = 3; ctx.stroke();
+                } else if (p.type === 'FIRE') {
+                    ctx.fillStyle = '#e67e22'; ctx.fill(); ctx.strokeStyle = '#f1c40f'; ctx.lineWidth = 2; ctx.stroke();
+                } else if (p.type === 'ION') {
+                    ctx.fillStyle = '#00ffff'; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+                }
             }
         });
 
         enemies.forEach(e => {
+            // Ghost if forming
+            ctx.globalAlpha = (e.mode === 'FORMATION' && formationStep < 2) ? 0.5 : 1.0;
             ctx.fillStyle = (e.mode === 'FORMATION') ? '#fff' : '#e74c3c'; 
             ctx.beginPath();
             ctx.arc(e.x, e.y, e.radius, 0, Math.PI*2);
             ctx.fill();
             ctx.strokeStyle = 'white'; ctx.lineWidth = 1.5; ctx.stroke();
+            ctx.globalAlpha = 1.0;
         });
 
         particles.forEach(p => {
@@ -1325,16 +1476,7 @@
 
     function gameLoop() {
         requestAnimationFrame(gameLoop);
-        
-        if(state === 'PLAYING') {
-            update();
-            draw();
-        } else if (state === 'DYING') {
-            updateParticles();
-            draw();
-        } else if (state === 'COUNTDOWN' || state === 'PAUSED' || state === 'GAMEOVER') {
-            draw();
-        }
+        if(state === 'PLAYING') { update(); draw(); } else if (state === 'DYING') { updateParticles(); draw(); } else if (state === 'COUNTDOWN' || state === 'PAUSED' || state === 'GAMEOVER' || state === 'SPLASH' || state === 'MENU') { draw(); }
     }
     
     requestAnimationFrame(gameLoop);
