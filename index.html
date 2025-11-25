@@ -170,6 +170,7 @@
             border-radius: 20px;
             border: 2px solid #555;
             margin: 0 auto 20px auto;
+            overflow: hidden;
         }
         
         /* The Safe Zone (Target) */
@@ -189,7 +190,7 @@
         #level-dot {
             position: absolute;
             top: 50%; left: 50%;
-            width: 40px; height: 40px;
+            width: 30px; height: 30px;
             background: #e74c3c;
             border-radius: 50%;
             transform: translate(-50%, -50%);
@@ -251,7 +252,7 @@
                 <div id="level-dot"></div>
             </div>
             <p style="color: #bdc3c7;">Center the Bubble to Start</p>
-            <p style="font-size:12px; color:#555;">(Hold phone at comfortable reading angle)</p>
+            <p style="font-size:12px; color:#555;">(Hold phone at comfortable 45° angle)</p>
         </div>
 
         <div id="pause-screen" class="screen-box">
@@ -301,8 +302,8 @@
         
         ionDelay: 1000,         
         ionSpeed: 14,           
-        ionGrowth: 1.0,         
-        ionMaxRadius: 300,      // Huge
+        ionGrowth: 0.8,         
+        ionMaxRadius: 250,      
         
         multiplierResetTime: 15000 
     };
@@ -333,6 +334,7 @@
         if(isMusicPlaying) return;
         isMusicPlaying = true;
         musicStartTime = audioCtx.currentTime - (MUSIC_TOTAL_DURATION * 0.3); 
+        seqState = { chordIndex: 0, noteIndex: 0, beatCounter: 0 };
         scheduleNextBeat();
     }
 
@@ -466,7 +468,7 @@
 
     const slider = document.getElementById('diff-slider');
     const diffVal = document.getElementById('diff-val');
-    let difficultyLevel = 1; // Default Easy
+    let difficultyLevel = 1; 
 
     let state = 'SPLASH'; 
     let width, height;
@@ -551,7 +553,7 @@
         uiSplash.style.display = 'none';
         uiStart.style.display = 'block';
         state = 'MENU';
-        // Set default easy
+        // Reset UI
         diffVal.innerText = "EASY";
         slider.value = 1;
     }
@@ -627,12 +629,12 @@
     });
 
     function checkLevelAndStart() {
-        // Center target around Beta 45 (Holding)
-        // Accept range 20 to 70 deg Beta (+/- 25)
-        // Accept Gamma +/- 5
+        // Holding Angle Calibration
+        // Expect Beta around 45 (Holding phone)
+        // Expect Gamma around 0 (Level)
         
         let validY = (rawTiltBeta >= 20 && rawTiltBeta <= 70);
-        let validX = (Math.abs(rawTiltGamma) <= 5);
+        let validX = (Math.abs(rawTiltGamma) <= 10);
 
         if (!validX || !validY) {
             uiStart.style.display = 'none';
@@ -644,11 +646,10 @@
     }
 
     function runLevelLoop() {
-        // Map Raw Beta (Target 45) to Screen Y (0 center)
-        // Range +/- 30 degrees covers 150px
+        // VISUAL MAPPING
+        // Target is center = 45deg Beta
+        // Scale: +/- 30 deg range
         let by = (rawTiltBeta - 45) * 5; 
-        
-        // Map Raw Gamma (Target 0)
         let bx = rawTiltGamma * 10;
 
         if(orientationSign === 1) {
@@ -657,7 +658,7 @@
              levelDot.style.transform = `translate(calc(-50% - ${by}px), calc(-50% - ${bx}px))`;
         }
 
-        let validY = (rawTiltBeta >= 20 && rawTiltBeta <= 70);
+        let validY = (rawTiltBeta >= 25 && rawTiltBeta <= 65); // 45 +/- 20
         let validX = (Math.abs(rawTiltGamma) <= 5);
 
         if (validX && validY) {
@@ -707,7 +708,7 @@
         if(spawnTimeout) clearTimeout(spawnTimeout);
 
         if(difficultyLevel === 1) { 
-            CONFIG.baseSpeed = 0.02; // SLOWER
+            CONFIG.baseSpeed = 0.02; // SLOW START
             CONFIG.spawnRate = 0.02;
         } else if(difficultyLevel === 2) { 
             CONFIG.baseSpeed = 0.1;
@@ -800,14 +801,12 @@
     function spawnPowerup() {
         let r = Math.random();
         let type = 'SHIELD';
-        
-        // Distribution
-        if (r < 0.25) type = 'SHIELD';
-        else if (r < 0.50) type = 'STAR';
-        else if (r < 0.65) type = 'HOLE';
-        else if (r < 0.75) type = 'FIRE';
-        else if (r < 0.85) type = 'ION';
-        else type = 'DIAMOND_BOMB'; // 15% chance
+        if (r < 0.30) type = 'SHIELD';
+        else if (r < 0.60) type = 'STAR';
+        else if (r < 0.75) type = 'HOLE';
+        else if (r < 0.85) type = 'FIRE';
+        else if (r < 0.92) type = 'ION';
+        else type = 'DIAMOND_BOMB'; // Fixed Logic
 
         powerups.push({ 
             x: Math.random() * (width-40) + 20, 
@@ -833,7 +832,7 @@
         boostOriginalVx = player.vx;
         boostOriginalVy = player.vy;
         boostTimer = CONFIG.fireDuration; 
-        invincibilityTimer = CONFIG.fireDuration + 400; // Extra buffer
+        invincibilityTimer = CONFIG.fireDuration + 200; 
     }
 
     function activateDiamondBomb() {
@@ -848,7 +847,7 @@
                     vy: Math.sin(angle) * speed,
                     radius: 7.5,
                     isProjectile: true,
-                    projectileTimer: 60 // 1 second immunity
+                    projectileTimer: 60 // Immune frames
                 });
             }
         }, 250);
@@ -893,6 +892,7 @@
     }
 
     function checkMagnet(item) {
+        // If projectile, skip magnet
         if(item.isProjectile && item.projectileTimer > 0) return;
 
         let dx = player.x - item.x;
@@ -973,20 +973,34 @@
                 let t = (phase - 300) / 100; 
                 player.vx = player.vx * (1-t) + boostOriginalVx * t;
                 player.vy = player.vy * (1-t) + boostOriginalVy * t;
-                
-                // Forward Fire
-                fireTrails.push({
-                    x: player.x + Math.cos(player.angle)*30 + (Math.random()-0.5)*10, 
-                    y: player.y + Math.sin(player.angle)*30 + (Math.random()-0.5)*10,
-                    life: CONFIG.fireTrailLife,
-                    maxLife: CONFIG.fireTrailLife,
-                    size: 15 + Math.random() * 15, 
-                    angle: Math.random() * Math.PI * 2,
-                    vx: Math.cos(player.angle) * 3, 
-                    vy: Math.sin(player.angle) * 3
-                });
             }
             
+            for(let k=0; k<3; k++) {
+                fireTrails.push({
+                    x: player.x + (Math.random()-0.5)*10, 
+                    y: player.y + (Math.random()-0.5)*10,
+                    life: CONFIG.fireTrailLife,
+                    maxLife: CONFIG.fireTrailLife,
+                    size: 10 + Math.random() * 20, 
+                    angle: Math.random() * Math.PI * 2,
+                    vx: (Math.random()-0.5)*0.5, 
+                    vy: (Math.random()-0.5)*0.5
+                });
+            }
+            // Forward Fire Cone
+            if (phase > 300) {
+                 let ang = player.angle + (Math.random()-0.5)*0.5;
+                 fireTrails.push({
+                    x: player.x + Math.cos(ang)*30, 
+                    y: player.y + Math.sin(ang)*30,
+                    life: CONFIG.fireTrailLife,
+                    maxLife: CONFIG.fireTrailLife,
+                    size: 15 + Math.random() * 10, 
+                    angle: Math.random() * Math.PI * 2,
+                    vx: Math.cos(ang) * 5, 
+                    vy: Math.sin(ang) * 5
+                });
+            }
             boostTimer -= 16;
         } else {
             let diffX = getShortestAngleDiff(rawTiltBeta, baseTiltBeta); 
@@ -1122,19 +1136,43 @@
         for (let i = enemies.length - 1; i >= 0; i--) {
             let e = enemies[i];
             
-            if (invincibilityTimer <= 0) {
-                let dx = player.x - e.x;
-                let dy = player.y - e.y;
-                let dist = Math.sqrt(dx*dx + dy*dy);
-                e.vx = (dx / dist) * e.speed;
-                e.vy = (dy / dist) * e.speed;
-            } else {
-                e.vx *= 0.95; e.vy *= 0.95; 
+            if (e.mode === 'IDLE') {
+                if (invincibilityTimer <= 0) {
+                    let dx = player.x - e.x;
+                    let dy = player.y - e.y;
+                    let dist = Math.sqrt(dx*dx + dy*dy);
+                    e.vx = (dx / dist) * e.speed;
+                    e.vy = (dy / dist) * e.speed;
+                } else {
+                    e.vx *= 0.95; e.vy *= 0.95; 
+                }
+            } else if (e.mode === 'FORMATION') {
+                if (formationStep === 0) {
+                    let tx = (width/2) + e.offsetX;
+                    let ty = 100 + e.offsetY; 
+                    let dx = tx - e.x;
+                    let dy = ty - e.y;
+                    e.vx = dx * 0.05; 
+                    e.vy = dy * 0.05;
+                } else if (formationStep === 1) {
+                    e.vx = 0; e.vy = 0;
+                } else if (formationStep === 2) {
+                    if (e.vx === 0) {
+                        let dx = player.x - e.x;
+                        let dy = player.y - e.y;
+                        let dist = Math.hypot(dx, dy);
+                        e.vx = (dx/dist) * 12; 
+                        e.vy = (dy/dist) * 12;
+                    }
+                }
             }
             
             e.x += e.vx;
             e.y += e.vy;
             
+            // GHOSTING
+            if (e.mode === 'FORMATION' && formationStep < 2) continue;
+
             let hitDist = (shieldActive || invincibilityTimer > 0) ? CONFIG.shieldRadius : (player.size * CONFIG.hitboxRatio);
             let pDist = Math.hypot(player.x - e.x, player.y - e.y);
 
@@ -1159,9 +1197,11 @@
             let d = diamonds[i];
             checkMagnet(d); 
             
+            // PROJECTILE
             if (d.isProjectile) {
-                 d.vx *= 0.97; d.vy *= 0.97; 
+                 d.vx *= 0.92; d.vy *= 0.92; // HEAVY DRAG
                  d.projectileTimer--; 
+                 
                  let speed = Math.hypot(d.vx, d.vy);
                  if(speed < 4.0) d.isProjectile = false;
                  else {
@@ -1318,6 +1358,7 @@
             ctx.save();
             ctx.translate(f.x, f.y);
             ctx.rotate(f.angle + (Date.now()/200)); 
+            // Glowing Orb instead of square
             let oscSize = f.size * (0.8 + Math.sin(Date.now()/50)*0.2); 
             ctx.beginPath();
             ctx.arc(0, 0, oscSize/2, 0, Math.PI*2);
@@ -1412,6 +1453,7 @@
         });
 
         enemies.forEach(e => {
+            // Ghost if forming
             ctx.globalAlpha = (e.mode === 'FORMATION' && formationStep < 2) ? 0.5 : 1.0;
             ctx.fillStyle = (e.mode === 'FORMATION') ? '#fff' : '#e74c3c'; 
             ctx.beginPath();
@@ -1471,7 +1513,7 @@
 
     function gameLoop() {
         requestAnimationFrame(gameLoop);
-        if(state === 'PLAYING') { update(); draw(); } else if (state === 'DYING') { updateParticles(); draw(); } else if (state === 'COUNTDOWN' || state === 'PAUSED' || state === 'GAMEOVER' || state === 'SPLASH' || state === 'MENU') { draw(); }
+        if(state === 'PLAYING') { update(); draw(); } else if (state === 'DYING') { updateParticles(); draw(); } else if (state === 'COUNTDOWN' || state === 'PAUSED' || state === 'GAMEOVER' || state === 'SPLASH' || state === 'MENU' || state === 'CALIBRATION') { draw(); }
     }
     
     requestAnimationFrame(gameLoop);
