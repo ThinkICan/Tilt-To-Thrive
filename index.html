@@ -88,7 +88,7 @@
             max-width: 80%;
         }
 
-        #start-screen, #game-over, #pause-screen, #level-screen { display: none; }
+        #start-screen, #game-over, #pause-screen { display: none; }
         
         /* --- SPLASH ART STYLING --- */
         #splash-screen {
@@ -160,43 +160,6 @@
             animation: flash 0.5s infinite;
         }
         @keyframes flash { 0% {opacity:0;} 50% {opacity:1;} 100% {opacity:0;} }
-
-        /* BUBBLE LEVEL UI */
-        #level-container {
-            position: relative;
-            width: 300px;
-            height: 300px;
-            background: rgba(0,0,0,0.5);
-            border-radius: 20px;
-            border: 2px solid #555;
-            margin: 0 auto 20px auto;
-            overflow: hidden; /* Keeps bubble inside */
-        }
-        
-        /* The Safe Zone */
-        #level-target {
-            position: absolute;
-            top: 50%; left: 50%;
-            width: 60px;  
-            height: 60px; 
-            border: 4px solid #e74c3c;
-            border-radius: 50%;
-            transform: translate(-50%, -50%);
-            box-shadow: 0 0 15px rgba(231, 76, 60, 0.2);
-            transition: border-color 0.2s;
-        }
-        
-        /* The Bubble */
-        #level-dot {
-            position: absolute;
-            top: 50%; left: 50%;
-            width: 30px; height: 30px;
-            background: #e74c3c;
-            border-radius: 50%;
-            transform: translate(-50%, -50%);
-            transition: background 0.1s;
-            box-shadow: 0 0 10px currentColor;
-        }
     </style>
 </head>
 <body>
@@ -241,18 +204,9 @@
                 <input type="range" min="1" max="3" value="1" id="diff-slider">
                 <span id="diff-val" class="diff-label">EASY</span>
             </div>
-
+            
+            <p style="font-size: 12px; color: #5da878;">(Hold comfortable. Auto-calibrates on GO)</p>
             <button id="start-btn">LAUNCH</button>
-        </div>
-
-        <div id="level-screen" class="screen-box">
-            <h2 style="color:white; margin-top:0;">CALIBRATION</h2>
-            <div id="level-container">
-                <div id="level-target"></div>
-                <div id="level-dot"></div>
-            </div>
-            <p style="color: #bdc3c7;">Center the Bubble to Start</p>
-            <p style="font-size:12px; color:#555;">(Hold phone at comfortable 45° angle)</p>
         </div>
 
         <div id="pause-screen" class="screen-box">
@@ -452,7 +406,6 @@
     const uiStart = document.getElementById('start-screen');
     const uiPause = document.getElementById('pause-screen');
     const uiGameOver = document.getElementById('game-over');
-    const uiLevel = document.getElementById('level-screen');
     const uiCountdown = document.getElementById('countdown-text');
     const elScore = document.getElementById('score-display');
     const elCombo = document.getElementById('combo-display');
@@ -462,13 +415,9 @@
     const elMultContainer = document.getElementById('mult-bar-container');
     const uiWarning = document.getElementById('formation-warning');
     
-    // Level Elements
-    const levelDot = document.getElementById('level-dot');
-    const levelTarget = document.getElementById('level-target');
-
     const slider = document.getElementById('diff-slider');
     const diffVal = document.getElementById('diff-val');
-    let difficultyLevel = 1; // Default Easy
+    let difficultyLevel = 1; 
 
     let state = 'SPLASH'; 
     let width, height;
@@ -553,6 +502,7 @@
         uiSplash.style.display = 'none';
         uiStart.style.display = 'block';
         state = 'MENU';
+        // Reset UI
         diffVal.innerText = "EASY";
         slider.value = 1;
     }
@@ -614,11 +564,11 @@
         if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
             try {
                 const perm = await DeviceOrientationEvent.requestPermission();
-                if (perm === 'granted') checkLevelAndStart();
+                if (perm === 'granted') startCountdownSequence();
                 else alert('Permission denied');
             } catch (e) { console.error(e); }
         } else {
-            checkLevelAndStart();
+            startCountdownSequence();
         }
     }
 
@@ -626,56 +576,6 @@
         if(e.gamma !== null) rawTiltGamma = e.gamma; 
         if(e.beta !== null) rawTiltBeta = e.beta;
     });
-
-    function checkLevelAndStart() {
-        let validY = (rawTiltBeta >= 20 && rawTiltBeta <= 70);
-        let validX = (Math.abs(rawTiltGamma) <= 10);
-
-        if (!validX || !validY) {
-            uiStart.style.display = 'none';
-            uiLevel.style.display = 'block';
-            runLevelLoop();
-        } else {
-            startCountdownSequence();
-        }
-    }
-
-    function runLevelLoop() {
-        let by = (rawTiltBeta - 45) * 5; 
-        let bx = rawTiltGamma * 10;
-        
-        // CLAMPING LOGIC: Keep dot inside the circle
-        let dist = Math.sqrt(bx*bx + by*by);
-        let maxDist = 135; // 150px radius - 15px dot radius
-        if (dist > maxDist) {
-            let angle = Math.atan2(by, bx);
-            bx = Math.cos(angle) * maxDist;
-            by = Math.sin(angle) * maxDist;
-        }
-
-        if(orientationSign === 1) {
-             levelDot.style.transform = `translate(calc(-50% + ${by}px), calc(-50% + ${bx}px))`;
-        } else {
-             levelDot.style.transform = `translate(calc(-50% - ${by}px), calc(-50% - ${bx}px))`;
-        }
-
-        let validY = (rawTiltBeta >= 25 && rawTiltBeta <= 65); 
-        let validX = (Math.abs(rawTiltGamma) <= 5);
-
-        if (validX && validY) {
-            levelDot.style.background = '#2ecc71';
-            levelTarget.style.borderColor = '#2ecc71';
-            setTimeout(() => {
-                cancelAnimationFrame(levelRaf);
-                uiLevel.style.display = 'none';
-                startCountdownSequence();
-            }, 500);
-        } else {
-             levelDot.style.background = '#e74c3c';
-             levelTarget.style.borderColor = '#e74c3c';
-             levelRaf = requestAnimationFrame(runLevelLoop);
-        }
-    }
 
     function nextCountdownStep(count) {
         const uiCountdown = document.getElementById('countdown-text');
@@ -687,6 +587,7 @@
             uiCountdown.innerText = "GO!";
             playSound('go');
             
+            // Calibration at GO
             baseTiltGamma = rawTiltGamma;
             baseTiltBeta = rawTiltBeta;
 
@@ -703,7 +604,6 @@
         uiStart.style.display = 'none';
         uiGameOver.style.display = 'none';
         uiPause.style.display = 'none';
-        uiLevel.style.display = 'none';
         uiCountdown.style.display = 'block';
         
         if(spawnTimeout) clearTimeout(spawnTimeout);
@@ -848,7 +748,7 @@
                     vy: Math.sin(angle) * speed,
                     radius: 7.5,
                     isProjectile: true,
-                    projectileTimer: 90 // 1.5 sec safety
+                    projectileTimer: 60 // 1 second immunity
                 });
             }
         }, 250);
@@ -985,6 +885,20 @@
                     angle: Math.random() * Math.PI * 2,
                     vx: (Math.random()-0.5)*0.5, 
                     vy: (Math.random()-0.5)*0.5
+                });
+            }
+            // Forward Fire Cone
+            if (phase > 300) {
+                 let ang = player.angle + (Math.random()-0.5)*0.5;
+                 fireTrails.push({
+                    x: player.x + Math.cos(ang)*30, 
+                    y: player.y + Math.sin(ang)*30,
+                    life: CONFIG.fireTrailLife,
+                    maxLife: CONFIG.fireTrailLife,
+                    size: 15 + Math.random() * 10, 
+                    angle: Math.random() * Math.PI * 2,
+                    vx: Math.cos(ang) * 5, 
+                    vy: Math.sin(ang) * 5
                 });
             }
             boostTimer -= 16;
@@ -1156,6 +1070,9 @@
             e.x += e.vx;
             e.y += e.vy;
             
+            // GHOSTING
+            if (e.mode === 'FORMATION' && formationStep < 2) continue;
+
             let hitDist = (shieldActive || invincibilityTimer > 0) ? CONFIG.shieldRadius : (player.size * CONFIG.hitboxRatio);
             let pDist = Math.hypot(player.x - e.x, player.y - e.y);
 
@@ -1181,7 +1098,7 @@
             checkMagnet(d); 
             
             if (d.isProjectile) {
-                 d.vx *= 0.90; d.vy *= 0.90; // HEAVY DRAG
+                 d.vx *= 0.92; d.vy *= 0.92; // HEAVY DRAG
                  d.projectileTimer--; 
                  
                  // Wall bounce or energy loss
@@ -1371,6 +1288,7 @@
                 ctx.beginPath();
                 ctx.arc(bh.x, bh.y, 15, 0, Math.PI*2);
                 ctx.fill();
+                
                 ctx.strokeStyle = '#9b59b6';
                 ctx.lineWidth = 2;
                 for(let i=0; i<5; i++) {
@@ -1443,6 +1361,7 @@
         });
 
         enemies.forEach(e => {
+            // Ghost if forming
             ctx.globalAlpha = (e.mode === 'FORMATION' && formationStep < 2) ? 0.5 : 1.0;
             ctx.fillStyle = (e.mode === 'FORMATION') ? '#fff' : '#e74c3c'; 
             ctx.beginPath();
