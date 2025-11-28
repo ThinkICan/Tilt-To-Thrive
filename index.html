@@ -195,7 +195,7 @@
             <h2 style="margin:0 0 15px 0; color:#2ecc71; display:block;">MISSION</h2>
             <p class="instruction-text" style="margin-bottom: 20px;">
                 Avoid the Red Dots<br>
-                Collect Yellow Diamonds<br>
+                Collect White Diamonds<br>
                 Grab Powerups
             </p>
             
@@ -503,7 +503,6 @@
         uiSplash.style.display = 'none';
         uiStart.style.display = 'block';
         state = 'MENU';
-        // Default to Normal (2)
         diffVal.innerText = "NORMAL";
         slider.value = 2;
         difficultyLevel = 2;
@@ -695,7 +694,14 @@
         else speed += Math.log(score + 2000) * 0.2;
         speed = Math.min(8.0, speed);
         
-        enemies.push({ x: ex, y: ey, speed: speed, vx: 0, vy: 0, radius: 6, mode: 'IDLE' });
+        // Random drift for invincibility
+        let vx = 0, vy = 0;
+        if(invincibilityTimer > 0) {
+            vx = (Math.random() - 0.5) * 0.5;
+            vy = (Math.random() - 0.5) * 0.5;
+        }
+        
+        enemies.push({ x: ex, y: ey, speed: speed, vx: vx, vy: vy, radius: 6, mode: 'IDLE' });
     }
 
     function spawnDiamond() {
@@ -845,46 +851,83 @@
         }
     }
 
-    function triggerFormation() {
-        let type = Math.random() < 0.5 ? 'ARROW' : 'WALL';
+    function triggerFormation(type) {
         const uiWarning = document.getElementById('formation-warning');
         uiWarning.style.display = 'block';
         setTimeout(() => uiWarning.style.display = 'none', 2000);
         
-        if (type === 'ARROW') {
-            formationMode = 'ARROW';
-            formationStep = 0; 
-            let squad = enemies.filter(e => e.mode === 'IDLE').slice(0, 12);
-            while(squad.length < 12) { spawnEnemy(); squad.push(enemies[enemies.length-1]); }
-            squad.forEach((e, i) => {
+        // If 100+ enemies, we do a mass conversion
+        if (type === 'MASS_ARROW') {
+             formationMode = 'ARROW';
+             formationStep = 0;
+             // Convert ALL idle enemies
+             let squad = enemies.filter(e => e.mode === 'IDLE');
+             // Cap at 40 to prevent lag, kill the rest?
+             // Let's just use 40 for formation, kill rest for cleaner board
+             if(squad.length > 40) {
+                 let extras = squad.splice(40);
+                 extras.forEach(e => { e.mode = 'DYING'; }); // Filter out next frame
+             }
+             
+             squad.forEach((e, i) => {
                 e.mode = 'FORMATION';
-                let row = Math.floor(i/2);
-                let side = (i%2 === 0) ? -1 : 1;
-                e.offsetX = side * row * 10; 
-                e.offsetY = row * -10; 
+                let row = Math.floor(i/5); // Thicker arrow (5 wide)
+                let col = i % 5;
+                // Center align the 5 columns
+                e.offsetX = (col - 2) * 15; 
+                e.offsetY = row * -15; 
             });
+            
             setTimeout(() => { formationStep = 1; playSound('charge'); }, 2000); 
             setTimeout(() => { formationStep = 2; playSound('boost'); }, 3000); 
             setTimeout(() => { formationMode = 'NONE'; enemies.forEach(e => { if(e.mode==='FORMATION') e.mode='IDLE'; }); }, 5000);
+
         } else {
-            formationMode = 'WALL';
-            let side = Math.random() < 0.5 ? 'LEFT' : 'RIGHT';
-            let startX = (side === 'LEFT') ? -20 : width + 20;
-            let velX = (side === 'LEFT') ? 1.5 : -1.5; 
-            for(let i=0; i<15; i++) {
-                let spacing = height / 16;
-                enemies.push({ x: startX, y: (i+1) * spacing, speed: 0, vx: velX, vy: 0, radius: 6, mode: 'WALL_SWEEP' });
+             // Normal random formation
+             type = Math.random() < 0.5 ? 'ARROW' : 'WALL';
+             if (type === 'ARROW') {
+                formationMode = 'ARROW';
+                formationStep = 0; 
+                let squad = enemies.filter(e => e.mode === 'IDLE').slice(0, 12);
+                while(squad.length < 12) { spawnEnemy(); squad.push(enemies[enemies.length-1]); }
+                squad.forEach((e, i) => {
+                    e.mode = 'FORMATION';
+                    let row = Math.floor(i/2);
+                    let side = (i%2 === 0) ? -1 : 1;
+                    e.offsetX = side * row * 10; 
+                    e.offsetY = row * -10; 
+                });
+                setTimeout(() => { formationStep = 1; playSound('charge'); }, 2000); 
+                setTimeout(() => { formationStep = 2; playSound('boost'); }, 3000); 
+                setTimeout(() => { formationMode = 'NONE'; enemies.forEach(e => { if(e.mode==='FORMATION') e.mode='IDLE'; }); }, 5000);
+            } else {
+                formationMode = 'WALL';
+                let side = Math.random() < 0.5 ? 'LEFT' : 'RIGHT';
+                let startX = (side === 'LEFT') ? -20 : width + 20;
+                let velX = (side === 'LEFT') ? 1.5 : -1.5; 
+                for(let i=0; i<15; i++) {
+                    let spacing = height / 16;
+                    enemies.push({ x: startX, y: (i+1) * spacing, speed: 0, vx: velX, vy: 0, radius: 6, mode: 'WALL_SWEEP' });
+                }
+                setTimeout(() => { formationMode = 'NONE'; }, 10000); 
             }
-            setTimeout(() => { formationMode = 'NONE'; }, 10000); 
         }
     }
 
     function update() {
+        // Mercy / Overpopulation Check
+        if (enemies.length > 50 && formationMode === 'NONE') {
+            triggerFormation('MASS_ARROW');
+            lastWaveTime = Date.now(); // Reset Wave difficulty
+        }
+        
+        // Director
         directorTimer++;
         if (directorTimer > 1200 && formationMode === 'NONE') {
             triggerFormation();
             directorTimer = 0;
         }
+        
         if (pendingIon > 0) {
             pendingIon -= 16;
             if (pendingIon <= 0) fireIon();
@@ -1079,20 +1122,29 @@
         }
 
         // --- COLLISIONS ---
+        // Cleanup dead enemies first
+        enemies = enemies.filter(e => e.mode !== 'DYING');
+        
         for (let i = enemies.length - 1; i >= 0; i--) {
             let e = enemies[i];
             
+            // INVINCIBILITY LOGIC:
+            // If invincible, enemies DRIFT (no homing)
             if (e.mode === 'IDLE') {
                 if (invincibilityTimer <= 0) {
+                    // Homing
                     let dx = player.x - e.x;
                     let dy = player.y - e.y;
                     let dist = Math.sqrt(dx*dx + dy*dy);
                     e.vx = (dx / dist) * e.speed;
                     e.vy = (dy / dist) * e.speed;
                 } else {
-                    e.vx *= 0.95; e.vy *= 0.95; 
+                    // DRIFT (Slowly friction out but don't stop completely)
+                    e.vx *= 0.99; 
+                    e.vy *= 0.99; 
                 }
             } else if (e.mode === 'FORMATION') {
+                // Formation Logic (unchanged)
                 if (formationStep === 0) {
                     let tx = (width/2) + e.offsetX;
                     let ty = 100 + e.offsetY; 
@@ -1116,6 +1168,9 @@
             e.x += e.vx;
             e.y += e.vy;
             
+            // GHOSTING
+            if (e.mode === 'FORMATION' && formationStep < 2) continue;
+
             let hitDist = (shieldActive || invincibilityTimer > 0) ? CONFIG.shieldRadius : (player.size * CONFIG.hitboxRatio);
             let pDist = Math.hypot(player.x - e.x, player.y - e.y);
 
@@ -1185,7 +1240,7 @@
                 playSound('powerup');
                 if(p.type === 'SHIELD') shieldActive = true;
                 if(p.type === 'STAR') {
-                    invincibilityTimer = Math.max(invincibilityTimer, CONFIG.invincibilityTime);
+                    invincibilityTimer = CONFIG.invincibilityTime;
                     startStarSound(); 
                 }
                 if(p.type === 'HOLE') spawnBlackHole(p.x, p.y);
@@ -1328,7 +1383,6 @@
                 ctx.beginPath();
                 ctx.arc(bh.x, bh.y, 15, 0, Math.PI*2);
                 ctx.fill();
-                
                 ctx.strokeStyle = '#9b59b6';
                 ctx.lineWidth = 2;
                 for(let i=0; i<5; i++) {
